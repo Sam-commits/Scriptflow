@@ -11,6 +11,10 @@ npm test         # unit tests
 npm run build    # production build in dist/
 ```
 
+## Live app
+
+https://sam-commits.github.io/Scriptflow/ (deployed from `main` by GitHub Actions).
+
 ## What works today
 
 - **Screenplay and Stageplay editors** with industry-standard page layout (Courier 12pt, US Letter).
