@@ -1,4 +1,6 @@
-# Scriptflow
+# Right Write Wright
+
+*Right. Write. Wright.* (rightwritewright.com)
 
 A writer-focused app for screenplays and stageplays (multi-column AV scripts are coming), inspired by Final Draft and StudioBinder.
 
@@ -22,8 +24,8 @@ https://sam-commits.github.io/Scriptflow/ (deployed from `main` by GitHub Action
 - **SmartType:** autocompletes scene heading prefixes (INT./EXT.), locations, times of day, character names (most used first), extensions like (V.O.) and transitions. Typing `INT. ` in an Action line turns it into a Scene Heading.
 - **Navigator:** numbered scene list (acts and scenes for stageplays); click to jump.
 - **Title page** editor.
-- **Import:** Fountain (`.fountain`), Final Draft (`.fdx`), Scriptflow (`.scriptflow`).
-- **Export:** PDF with proper pagination (scene headings never stranded at the bottom of a page, speeches split with (MORE)/(CONT'D), optional scene numbers), Final Draft `.fdx`, Fountain, Scriptflow.
+- **Import:** Fountain (`.fountain`), Final Draft (`.fdx`), Right Write Wright (`.scriptflow`).
+- **Export:** PDF with proper pagination (scene headings never stranded at the bottom of a page, speeches split with (MORE)/(CONT'D), optional scene numbers), Final Draft `.fdx`, Fountain, Right Write Wright (`.scriptflow`).
 - **Autosave** to the browser, with a script library in the sidebar.
 
 ## How it's built
@@ -40,3 +42,7 @@ https://sam-commits.github.io/Scriptflow/ (deployed from `main` by GitHub Action
 3. Multi-column AV editor
 4. Beat boards (Three-Act, Save the Cat, Hero's Journey, Story Circle, freeform) and outline views linked to scenes
 5. GitHub sync: scripts as Fountain files, draft history, co-writer review
+
+## Name
+
+The app is called Right Write Wright. The repo, package name, `.scriptflow` file extension and browser storage keys still use the working name Scriptflow, so existing saved scripts and files keep working.
