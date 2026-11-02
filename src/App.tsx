@@ -138,7 +138,7 @@ export function App() {
     <div className="app">
       <style>{css}</style>
       <header className="topbar">
-        <div className="brand">Scriptflow</div>
+        <div className="brand">Right Write Wright</div>
         <button className="title-btn" onClick={() => setTitleOpen(true)} title="Edit title page">
           {script.titlePage.title || 'Untitled'}
           <span className="badge">{dt.name}</span>
@@ -165,7 +165,7 @@ export function App() {
             <option value="pdf">PDF</option>
             <option value="fdx">Final Draft (.fdx)</option>
             <option value="fountain" disabled={!dt.fountain}>Fountain{dt.fountain ? '' : ' (screenplays only)'}</option>
-            <option value="native">Scriptflow file</option>
+            <option value="native">Right Write Wright file (.scriptflow)</option>
           </select>
         </label>
       </header>
