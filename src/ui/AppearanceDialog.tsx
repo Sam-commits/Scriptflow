@@ -119,6 +119,10 @@ export function AppearanceDialog({ settings: s, mode, onChange, onReset, onClose
               onChange={(e) => onChange({ pageShadow: e.target.checked })} />
             Page shadow
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.showTags} onChange={(e) => onChange({ showTags: e.target.checked })} />
+            Highlight tagged elements (props, cast, locations…)
+          </label>
         </fieldset>
 
         <div className="modal-actions">

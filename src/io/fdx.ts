@@ -1,5 +1,5 @@
 import { getDocType, docTypeList } from '../doctypes';
-import { Block, Run, Script, emptyTitlePage, normalizeRuns } from '../model';
+import { Block, Run, Script, emptyTitlePage, normalizeRuns, printedRuns } from '../model';
 
 // Final Draft (.fdx) is XML. We read and write the script body (paragraph
 // types and bold/italic/underline). Final Draft applies its own template
@@ -12,7 +12,8 @@ export function toFdx(script: Script): string {
   const dt = getDocType(script.docType);
   const paras = script.blocks.map((b) => {
     const el = dt.elements.find((e) => e.id === b.type) ?? dt.elements.find((e) => e.id === dt.fallbackElement)!;
-    const runs = b.runs.length ? b.runs : [{ text: '' }];
+    const printed = printedRuns(b.runs);
+    const runs = printed.length ? printed : [{ text: '' }];
     const texts = runs.map((r) => {
       const style = [r.bold && 'Bold', r.italic && 'Italic', r.underline && 'Underline'].filter(Boolean).join('+');
       return `<Text${style ? ` Style="${style}"` : ''}>${esc(r.text)}</Text>`;

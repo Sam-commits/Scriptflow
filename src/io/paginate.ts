@@ -1,5 +1,5 @@
 import { DocTypeDef, ElementDef, getElement } from '../doctypes';
-import { Block, Run, blockText } from '../model';
+import { Block, Run, blockText, printedRuns } from '../model';
 
 // Lays a script out into printed pages the way Final Draft does:
 // Courier 12pt (10 chars/inch, 6 lines/inch), 1" top/bottom margins,
@@ -60,7 +60,7 @@ export function wrapRuns(runs: Run[], widthChars: number, upper = false): Segmen
 }
 
 function styledRuns(b: Block, el: ElementDef): Run[] {
-  let runs: Run[] = b.runs.map((r) => ({
+  let runs: Run[] = printedRuns(b.runs).map((r) => ({
     ...r,
     bold: r.bold || el.bold || undefined,
     italic: r.italic || el.italic || undefined,
