@@ -1,12 +1,14 @@
 import { accentTokens } from './accents';
 import { builtinThemes, night, paper } from './builtin';
 import { APPEARANCE_CSS_KEY, AppearanceSettings } from './settings';
+import { tagCss } from './tagColors';
 import { TOKEN_NAMES, ThemeDef, ThemeMode, ThemeTokens, cssVar } from './types';
 
 export * from './types';
 export * from './settings';
 export { accents } from './accents';
 export { builtinThemes } from './builtin';
+export { TAG_PALETTE, tagColorOn } from './tagColors';
 
 export const themesFor = (mode: ThemeMode) => builtinThemes.filter((t) => t.mode === mode);
 
@@ -28,7 +30,7 @@ export function themeTokens(s: AppearanceSettings, mode: ThemeMode): ThemeTokens
 }
 
 export function tokensToCss(tokens: ThemeTokens, mode: ThemeMode): string {
-  return TOKEN_NAMES.map((k) => `${cssVar(k)}:${tokens[k]}`).join(';') + `;color-scheme:${mode}`;
+  return TOKEN_NAMES.map((k) => `${cssVar(k)}:${tokens[k]}`).join(';') + `;${tagCss(tokens)};color-scheme:${mode}`;
 }
 
 /** Writes the theme onto <html> and caches both themes for the no-flash startup script. */

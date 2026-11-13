@@ -32,17 +32,24 @@ interface Props {
   pageStarts: PageStart[];
   /** Screen zoom (CSS zoom on the page); 1 = actual size. */
   zoom: number;
+  /** Called after every transaction, for panels that follow the cursor. */
+  onStateChange?: (state: EditorState) => void;
+  /** Open the tag picker for the selection (Ctrl/⌘+Shift+E or the floating Tag button). */
+  onTag?: () => void;
 }
+
+interface TagChip { left: number; top: number }
 
 const SCENE_START_RE = /^(int|ext|est|i\/e|int\.?\/ext)\.\s/i;
 
-export function Editor({ docType, initial, onChange, onElementChange, viewRef, pageStarts, zoom }: Props) {
+export function Editor({ docType, initial, onChange, onElementChange, viewRef, pageStarts, zoom, onStateChange, onTag }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [popup, setPopup] = useState<Popup | null>(null);
+  const [chip, setChip] = useState<TagChip | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const dismissed = useRef(false);
-  const cb = useRef({ onChange, onElementChange });
-  cb.current = { onChange, onElementChange };
+  const cb = useRef({ onChange, onElementChange, onStateChange, onTag });
+  cb.current = { onChange, onElementChange, onStateChange, onTag };
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
@@ -110,6 +117,7 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef, p
           'Mod-z': undo,
           'Mod-Shift-z': redo,
           'Mod-y': redo,
+          'Mod-Shift-e': () => { cb.current.onTag?.(); return true; },
           ...elementKeys,
         }),
         keymap(baseKeymap),
@@ -140,6 +148,16 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef, p
       });
     };
 
+    // A small "Tag" button follows a text selection.
+    const updateChip = (view: EditorView) => {
+      const { selection } = view.state;
+      if (selection.empty || !cb.current.onTag || !view.hasFocus()) { setChip(null); return; }
+      const end = view.coordsAtPos(selection.to);
+      const box = host.current!.getBoundingClientRect();
+      const z = zoomRef.current || 1;
+      setChip({ left: (end.right - box.left) / z + 6, top: (end.top - box.top) / z - 30 });
+    };
+
     const view = new EditorView(host.current!, {
       state,
       dispatchTransaction(tr) {
@@ -150,13 +168,18 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef, p
         const type = next.selection.$from.parent.attrs.type;
         if (type !== prevType || tr.docChanged || tr.selectionSet) cb.current.onElementChange(type);
         updateSmart(view);
+        updateChip(view);
+        cb.current.onStateChange?.(next);
       },
-      handleDOMEvents: { blur: () => { setTimeout(() => show(null), 150); return false; } },
+      handleDOMEvents: {
+        blur: () => { setTimeout(() => { show(null); if (!view.hasFocus()) setChip(null); }, 150); return false; },
+        focus: () => { updateChip(view); return false; },
+      },
     });
     viewRef.current = view;
     // Put the cursor at the end of the script.
-    view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)));
     view.focus();
+    view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)));
     return () => { view.destroy(); viewRef.current = null; };
     // The editor is recreated per script via a React key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,6 +206,13 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef, p
             >{it}</li>
           ))}
         </ul>
+      )}
+      {chip && !popup && (
+        <button
+          type="button" className="tag-chip" style={{ left: chip.left, top: chip.top }}
+          title="Tag this text (Ctrl/⌘+Shift+E)"
+          onMouseDown={(e) => { e.preventDefault(); cb.current.onTag?.(); }}
+        >Tag</button>
       )}
     </div>
   );

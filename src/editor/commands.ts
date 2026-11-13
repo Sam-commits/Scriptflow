@@ -12,7 +12,7 @@ export function setElementType(type: string): Command {
   return (state, dispatch) => {
     const { node, start, end } = currentBlock(state);
     if (!dispatch) return true;
-    let tr = state.tr.setNodeMarkup(start - 1, undefined, { type });
+    let tr = state.tr.setNodeMarkup(start - 1, undefined, { ...node.attrs, type });
     if (node.attrs.type === 'parenthetical' && node.textContent === '()') {
       tr = tr.delete(start, end);
     }
@@ -51,7 +51,9 @@ export function enterCommand(dt: DocTypeDef): Command {
       return true;
     }
     // Middle of a block: split it, both halves keep the same element.
-    dispatch(state.tr.split(state.selection.from).scrollIntoView());
+    // Scene-level tags stay with the first half.
+    const after = [{ type: schema.nodes.element, attrs: { type: node.attrs.type, tags: null } }];
+    dispatch(state.tr.split(state.selection.from, 1, after).scrollIntoView());
     return true;
   };
 }

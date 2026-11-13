@@ -15,11 +15,13 @@ export interface AppearanceSettings {
   pageView: 'paged' | 'continuous' | 'draft';
   pageNumbers: boolean;
   pageShadow: boolean;
+  /** Highlight tagged breakdown elements in the script. */
+  showTags: boolean;
 }
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   version: 1, mode: 'system', lightTheme: 'paper', darkTheme: 'night', accent: 'theme',
-  zoom: 1, pageView: 'paged', pageNumbers: true, pageShadow: true,
+  zoom: 1, pageView: 'paged', pageNumbers: true, pageShadow: true, showTags: true,
 };
 
 export const APPEARANCE_KEY = 'scriptflow:appearance';
@@ -58,5 +60,6 @@ export function normalize(v: Partial<AppearanceSettings> | null | undefined): Ap
     pageView: pick(s.pageView, ['paged', 'continuous', 'draft'] as const, d.pageView),
     pageNumbers: typeof s.pageNumbers === 'boolean' ? s.pageNumbers : d.pageNumbers,
     pageShadow: typeof s.pageShadow === 'boolean' ? s.pageShadow : d.pageShadow,
+    showTags: typeof s.showTags === 'boolean' ? s.showTags : d.showTags,
   };
 }

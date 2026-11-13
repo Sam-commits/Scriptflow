@@ -1,21 +1,31 @@
-import { TextSelection } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { docTypeList, getDocType, getElement } from './doctypes';
 import { Editor, docTypeCss } from './editor/Editor';
 import { setElementType } from './editor/commands';
+import {
+  Range, addTag, autoTagCharacters, findMentions, mentionFilter, mergeTag, removeTagEverywhere, removeTagHere,
+  selectionOrWord, setSceneTag, tagRanges, tagsAtSelection,
+} from './editor/tagging';
 import { download, NATIVE_EXT, parseFile, safeName, toFdx, toFountain } from './io/files';
 import { paginate, pageStarts } from './io/paginate';
 import { scriptToPdf } from './io/pdf';
-import { Block, Script, TitlePage, blockText } from './model';
+import { Block, Script, TagItem, TitlePage, blockText } from './model';
 import { sampleScreenplay } from './sample';
 import { ScriptMeta, blankScript, deleteScript, listScripts, loadScript, newId, saveScript } from './storage';
+import { breakdownCsv, findItem } from './tags/breakdown';
 import { AppearanceDialog } from './ui/AppearanceDialog';
+import { BreakdownPanel } from './ui/BreakdownPanel';
+import { TagDialog, TagRequest, lastCategory } from './ui/TagDialog';
 import { TitlePageDialog } from './ui/TitlePageDialog';
 import { useAppearance } from './ui/useAppearance';
 import { DEFAULT_APPEARANCE, ZOOM_MAX, ZOOM_MIN } from './themes';
 
 const LAST = 'scriptflow:last';
+const PANEL = 'scriptflow:breakdown-open';
+
+interface PendingTag { range: Range; text: string; others: Range[] }
 
 function initial(): { id: string; script: Script } {
   let id: string | null = null;
@@ -32,6 +42,12 @@ function initial(): { id: string; script: Script } {
 export function App() {
   const [{ id, script: loaded }, setCurrent] = useState(initial);
   const [script, setScript] = useState<Script>(loaded);
+  const scriptRef = useRef(script);
+  scriptRef.current = script;
+  const [pendingTag, setPendingTag] = useState<PendingTag | null>(null);
+  const [panelOpen, setPanelOpen] = useState(() => { try { return localStorage.getItem(PANEL) === '1'; } catch { return false; } });
+  const [cursor, setCursor] = useState<{ index: number; tags: string[] }>({ index: 0, tags: [] });
+  const [focusId, setFocusId] = useState<string | null>(null);
   const [library, setLibrary] = useState<ScriptMeta[]>(listScripts);
   const [element, setElement] = useState('');
   const [titleOpen, setTitleOpen] = useState(false);
@@ -51,7 +67,10 @@ export function App() {
 
   useEffect(() => { try { localStorage.setItem(LAST, id); } catch { /* ignore */ } }, [id]);
 
-  const persist = (next: Script) => {
+  /** Update the script; pass a function to build on the latest version (several updates can land in one event). */
+  const persist = (update: Script | ((s: Script) => Script)) => {
+    const next = typeof update === 'function' ? update(scriptRef.current) : update;
+    scriptRef.current = next;
     setScript(next);
     setSaved(false);
     window.clearTimeout(saveTimer.current);
@@ -62,14 +81,16 @@ export function App() {
 
   const flush = () => {
     window.clearTimeout(saveTimer.current);
-    saveScript(id, script); setSaved(true);
+    saveScript(id, scriptRef.current); setSaved(true);
   };
 
   const open = (nid: string, s: Script) => {
     flush();
     setCurrent({ id: nid, script: s });
+    scriptRef.current = s;
     setScript(s);
     setLibrary(listScripts());
+    setFocusId(null);
   };
 
   const createNew = (docType: string) => {
@@ -100,7 +121,7 @@ export function App() {
     if (mid === id) {
       const r = rest[0];
       const s = r && loadScript(r.id);
-      if (r && s) { setCurrent({ id: r.id, script: s }); setScript(s); }
+      if (r && s) { setCurrent({ id: r.id, script: s }); scriptRef.current = s; setScript(s); }
       else createNew('screenplay');
     }
   };
@@ -158,18 +179,133 @@ export function App() {
     view.focus();
   };
 
+  // ---- Tagging -------------------------------------------------------------
+  const items = script.tags ?? [];
+  const setItems = (next: TagItem[]) => persist((s) => ({ ...s, tags: next }));
+
+  const openTagDialog = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const range = selectionOrWord(view.state);
+    if (!range) { setError('Select the words you want to tag first.'); return; }
+    const text = view.state.doc.textBetween(range.from, range.to, ' ', ' ');
+    const others = findMentions(view.state.doc, text, mentionFilter(dt)).filter((r) => r.to <= range.from || r.from >= range.to);
+    setPendingTag({ range, text, others });
+  };
+
+  const applyTag = (req: TagRequest) => {
+    const view = viewRef.current;
+    const pending = pendingTag;
+    setPendingTag(null);
+    if (!view || !pending) return;
+    let item = findItem(items, req.category, req.name);
+    if (!item) {
+      item = { id: newId(), category: req.category, name: req.name, ...(req.notes && { notes: req.notes }) };
+      setItems([...items, item]);
+    }
+    const ranges = req.everywhere ? [pending.range, ...pending.others] : [pending.range];
+    const tr = addTag(view.state.tr, ranges, item.id);
+    tr.setSelection(TextSelection.create(tr.doc, pending.range.to));
+    view.dispatch(tr);
+    view.focus();
+  };
+
+  const onEditorState = (state: EditorState) => {
+    const index = state.selection.$from.index(0);
+    const tags = tagsAtSelection(state);
+    setCursor((c) => (c.index === index && c.tags.join() === tags.join() ? c : { index, tags }));
+  };
+
+  const dispatchTag = (make: (state: EditorState) => ReturnType<EditorState['tr']['addMark']> | null) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const tr = make(view.state);
+    if (tr) view.dispatch(tr);
+  };
+
+  /** Select the next use of an item after the cursor, optionally only inside blocks [start, end). */
+  const findNext = (tagId: string, within?: [number, number]) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const doc = view.state.doc;
+    let lo = 0, hi = doc.content.size;
+    if (within) {
+      doc.forEach((n, off, i) => { if (i === within[0]) lo = off; if (i === within[1] - 1) hi = off + n.nodeSize; });
+    }
+    const all = tagRanges(doc, tagId).filter((r) => r.from >= lo && r.to <= hi);
+    if (!all.length) return;
+    const cur = view.state.selection.from;
+    const next = all.find((r) => r.from > cur) ?? all[0];
+    setFocusId(tagId);
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, next.from, next.to)).scrollIntoView());
+    view.focus();
+    (view.domAtPos(next.from).node as HTMLElement).parentElement?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  };
+
+  const addSceneTag = (sceneStart: number, category: string, name: string) => {
+    let item = findItem(items, category, name);
+    if (!item) {
+      item = { id: newId(), category, name: category === 'cast' ? name.toUpperCase() : name };
+      setItems([...items, item]);
+    }
+    const tagId = item.id;
+    dispatchTag((st) => setSceneTag(st, sceneStart, tagId, true));
+  };
+
+  const updateItem = (itemId: string, patch: Partial<TagItem>) => {
+    const cur = items.find((i) => i.id === itemId);
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    const clash = findItem(items.filter((i) => i.id !== itemId), next.category, next.name);
+    if (clash) {
+      // Renamed into an element that already exists: move its tags over.
+      setItems(items.filter((i) => i.id !== itemId));
+      dispatchTag((st) => mergeTag(st, itemId, clash.id));
+    } else {
+      setItems(items.map((i) => (i.id === itemId ? next : i)));
+    }
+  };
+
+  const deleteItem = (itemId: string) => {
+    setItems(items.filter((i) => i.id !== itemId));
+    dispatchTag((st) => removeTagEverywhere(st, itemId));
+    if (focusId === itemId) setFocusId(null);
+  };
+
+  const autoCast = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const { tr, items: next } = autoTagCharacters(view.state, dt, items, newId);
+    setItems(next);
+    view.dispatch(tr);
+  };
+
+  const togglePanel = (open = !panelOpen) => {
+    setPanelOpen(open);
+    try { localStorage.setItem(PANEL, open ? '1' : '0'); } catch { /* ignore */ }
+  };
+
+  // Each tag item takes its category's theme colors.
+  const tagStyle = useMemo(() => items.map((i) => {
+    const sel = `.tags-on .page [data-tag="${CSS.escape(i.id)}"]`;
+    return `${sel}{--tc:var(--tag-${i.category});--tc-soft:var(--tag-${i.category}-soft);--tc-ui:var(--tag-${i.category}-ui);--tc-ui-soft:var(--tag-${i.category}-ui-soft)}`;
+  }).join('\n') + (focusId ? `\n.tags-on .page [data-tag="${CSS.escape(focusId)}"]{outline:2px solid var(--tc);outline-offset:1px;border-radius:2px}` : ''),
+  [items, focusId]);
+
   const exportAs = (kind: string) => {
     flush();
     const name = safeName(script);
     if (kind === 'pdf') scriptToPdf(script, { sceneNumbers }).save(`${name}.pdf`);
     if (kind === 'fountain') download(`${name}.fountain`, toFountain(script));
     if (kind === 'fdx') download(`${name}.fdx`, toFdx(script), 'application/xml');
+    if (kind === 'csv') download(`${name} breakdown.csv`, breakdownCsv(dt, scriptRef.current), 'text/csv');
     if (kind === 'native') download(`${name}${NATIVE_EXT}`, JSON.stringify(script, null, 2), 'application/json');
   };
 
   return (
-    <div className={`app view-${look.settings.pageView}${look.settings.pageShadow ? '' : ' no-shadow'}${look.settings.pageNumbers ? '' : ' no-page-numbers'}`}>
+    <div className={`app view-${look.settings.pageView}${look.settings.pageShadow ? '' : ' no-shadow'}${look.settings.pageNumbers ? '' : ' no-page-numbers'}${look.settings.showTags ? ' tags-on' : ''}${panelOpen ? ' with-panel' : ''}`}>
       <style>{css}</style>
+      <style>{tagStyle}</style>
       <header className="topbar">
         <div className="brand">Scriptflow</div>
         <button className="title-btn" onClick={() => setTitleOpen(true)} title="Edit title page">
@@ -184,6 +320,8 @@ export function App() {
             ))}
           </select>
         </label>
+        <button onMouseDown={(e) => e.preventDefault()} onClick={openTagDialog} title="Tag the selected text as a prop, character, location, shot… (Ctrl/⌘+Shift+E)">Tag</button>
+        <button className={panelOpen ? 'on' : ''} aria-pressed={panelOpen} onClick={() => togglePanel()} title="Breakdown of tagged elements">Breakdown</button>
         <div className="spacer" />
         <button onClick={() => fileInput.current?.click()}>Import</button>
         <input
@@ -198,6 +336,7 @@ export function App() {
             <option value="pdf">PDF</option>
             <option value="fdx">Final Draft (.fdx)</option>
             <option value="fountain" disabled={!dt.fountain}>Fountain{dt.fountain ? '' : ' (screenplays only)'}</option>
+            <option value="csv" disabled={!items.length}>Breakdown (.csv)</option>
             <option value="native">Scriptflow file</option>
           </select>
         </label>
@@ -252,12 +391,47 @@ export function App() {
           docType={dt}
           initial={loaded}
           viewRef={viewRef}
-          onChange={(blocks: Block[]) => persist({ ...script, blocks })}
+          onChange={(blocks: Block[]) => persist((s) => ({ ...s, blocks }))}
           onElementChange={setElement}
+          onStateChange={onEditorState}
+          onTag={openTagDialog}
           pageStarts={starts}
           zoom={zoom}
         />
       </main>
+
+      {panelOpen && (
+        <BreakdownPanel
+          dt={dt}
+          blocks={script.blocks}
+          items={items}
+          cursorIndex={cursor.index}
+          cursorTags={cursor.tags}
+          showTags={look.settings.showTags}
+          focusId={focusId}
+          onShowTags={(on) => look.update({ showTags: on })}
+          onFind={findNext}
+          onRemoveHere={(tid) => dispatchTag((st) => removeTagHere(st, tid))}
+          onSceneTag={addSceneTag}
+          onRemoveSceneTag={(start, tid) => dispatchTag((st) => setSceneTag(st, start, tid, false))}
+          onUpdateItem={updateItem}
+          onDeleteItem={deleteItem}
+          onAutoCast={autoCast}
+          onExportCsv={() => exportAs('csv')}
+          onClose={() => togglePanel(false)}
+        />
+      )}
+
+      {pendingTag && (
+        <TagDialog
+          text={pendingTag.text}
+          otherMentions={pendingTag.others.length}
+          items={items}
+          initialCategory={lastCategory()}
+          onTag={applyTag}
+          onClose={() => { setPendingTag(null); viewRef.current?.focus(); }}
+        />
+      )}
 
       <footer className="statusbar">
         <span>{getElement(dt, element || dt.firstElement).label}</span>
@@ -283,7 +457,7 @@ export function App() {
         <TitlePageDialog
           value={script.titlePage}
           onClose={() => setTitleOpen(false)}
-          onSave={(tp: TitlePage) => { persist({ ...script, titlePage: tp }); setTitleOpen(false); }}
+          onSave={(tp: TitlePage) => { persist((s) => ({ ...s, titlePage: tp })); setTitleOpen(false); }}
         />
       )}
     </div>
