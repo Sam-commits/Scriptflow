@@ -7,6 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      // Apply the saved color theme before the app loads, so a dark setup never flashes white.
+      try {
+        var a = JSON.parse(localStorage.getItem('scriptflow:appearance-css') || 'null');
+        if (a) {
+          var dark = a.mode === 'dark' || (a.mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.style.cssText = dark ? a.dark : a.light;
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

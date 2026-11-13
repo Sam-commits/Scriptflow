@@ -5,12 +5,15 @@ import { docTypeList, getDocType, getElement } from './doctypes';
 import { Editor, docTypeCss } from './editor/Editor';
 import { setElementType } from './editor/commands';
 import { download, NATIVE_EXT, parseFile, safeName, toFdx, toFountain } from './io/files';
-import { paginate } from './io/paginate';
+import { paginate, pageStarts } from './io/paginate';
 import { scriptToPdf } from './io/pdf';
 import { Block, Script, TitlePage, blockText } from './model';
 import { sampleScreenplay } from './sample';
 import { ScriptMeta, blankScript, deleteScript, listScripts, loadScript, newId, saveScript } from './storage';
+import { AppearanceDialog } from './ui/AppearanceDialog';
 import { TitlePageDialog } from './ui/TitlePageDialog';
+import { useAppearance } from './ui/useAppearance';
+import { DEFAULT_APPEARANCE, ZOOM_MAX, ZOOM_MIN } from './themes';
 
 const LAST = 'scriptflow:last';
 
@@ -32,6 +35,10 @@ export function App() {
   const [library, setLibrary] = useState<ScriptMeta[]>(listScripts);
   const [element, setElement] = useState('');
   const [titleOpen, setTitleOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const look = useAppearance();
+  const workspaceRef = useRef<HTMLElement>(null);
+  const [fitZoom, setFitZoom] = useState(1);
   const [sceneNumbers, setSceneNumbers] = useState(false);
   const [saved, setSaved] = useState(true);
   const [error, setError] = useState('');
@@ -107,6 +114,32 @@ export function App() {
 
   const sceneCount = nav.filter((n) => !n.section).length;
   const pageCount = useMemo(() => paginate(dt, script.blocks).length, [script.blocks, dt]);
+  const showBreaks = look.settings.pageView !== 'draft';
+  const starts = useMemo(() => (showBreaks ? pageStarts(dt, script.blocks) : []), [script.blocks, dt, showBreaks]);
+
+  // "Fit" zoom: scale the 8.5in page (plus a little room) to the workspace width.
+  useEffect(() => {
+    const el = workspaceRef.current;
+    if (!el || look.settings.zoom !== 'fit' || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      const z = (el.clientWidth - 48) / (8.5 * 96);
+      setFitZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [look.settings.zoom]);
+  const zoom = look.settings.zoom === 'fit' ? fitZoom : look.settings.zoom;
+
+  // Ctrl/Cmd+Shift+L flips light and dark.
+  const toggleRef = useRef(look.toggleMode);
+  toggleRef.current = look.toggleMode;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') { e.preventDefault(); toggleRef.current(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const jumpTo = (index: number) => {
     const view = viewRef.current;
@@ -135,7 +168,7 @@ export function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app view-${look.settings.pageView}${look.settings.pageShadow ? '' : ' no-shadow'}${look.settings.pageNumbers ? '' : ' no-page-numbers'}`}>
       <style>{css}</style>
       <header className="topbar">
         <div className="brand">Scriptflow</div>
@@ -168,6 +201,14 @@ export function App() {
             <option value="native">Scriptflow file</option>
           </select>
         </label>
+        <button className="icon-btn" onClick={look.toggleMode}
+          title={`Switch to ${look.mode === 'dark' ? 'light' : 'dark'} mode (Ctrl/⌘+Shift+L)`}
+          aria-label={`Switch to ${look.mode === 'dark' ? 'light' : 'dark'} mode`}>
+          {look.mode === 'dark' ? <SunIcon /> : <MoonIcon />}
+        </button>
+        <button className="icon-btn" onClick={() => setAppearanceOpen(true)} title="Appearance" aria-label="Appearance settings">
+          <PaletteIcon />
+        </button>
       </header>
 
       {error && <div className="error" role="alert">{error} <button onClick={() => setError('')}>Dismiss</button></div>}
@@ -205,7 +246,7 @@ export function App() {
         </section>
       </aside>
 
-      <main className="workspace">
+      <main className="workspace" ref={workspaceRef}>
         <Editor
           key={id}
           docType={dt}
@@ -213,6 +254,8 @@ export function App() {
           viewRef={viewRef}
           onChange={(blocks: Block[]) => persist({ ...script, blocks })}
           onElementChange={setElement}
+          pageStarts={starts}
+          zoom={zoom}
         />
       </main>
 
@@ -220,10 +263,21 @@ export function App() {
         <span>{getElement(dt, element || dt.firstElement).label}</span>
         <span>{sceneCount} {sceneCount === 1 ? 'scene' : 'scenes'}</span>
         <span>{pageCount} {pageCount === 1 ? 'page' : 'pages'}</span>
+        <button className="zoom-btn" onClick={() => setAppearanceOpen(true)} title="Zoom and appearance">{Math.round(zoom * 100)}%</button>
         <label><input type="checkbox" checked={sceneNumbers} onChange={(e) => setSceneNumbers(e.target.checked)} /> Scene numbers in PDF</label>
         <span className="saved">{saved ? 'Saved' : 'Saving…'}</span>
         <span className="keys">Enter: next element · Tab: change element · Shift+Enter: line break</span>
       </footer>
+
+      {appearanceOpen && (
+        <AppearanceDialog
+          settings={look.settings}
+          mode={look.mode}
+          onChange={look.update}
+          onReset={() => look.replace(DEFAULT_APPEARANCE)}
+          onClose={() => setAppearanceOpen(false)}
+        />
+      )}
 
       {titleOpen && (
         <TitlePageDialog
@@ -234,4 +288,15 @@ export function App() {
       )}
     </div>
   );
+}
+
+const icon = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+function SunIcon() {
+  return <svg {...icon}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>;
+}
+function MoonIcon() {
+  return <svg {...icon}><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>;
+}
+function PaletteIcon() {
+  return <svg {...icon}><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2a2 2 0 0 0-1.5 3.3A1.6 1.6 0 0 1 12 22z" /><circle cx="7.5" cy="10.5" r="1" /><circle cx="11" cy="7" r="1" /><circle cx="16" cy="8.5" r="1" /></svg>;
 }
