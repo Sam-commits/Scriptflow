@@ -79,9 +79,31 @@ function linesFor(b: Block, el: ElementDef, sceneNumber?: number): Line[] {
 }
 
 export function paginate(dt: DocTypeDef, blocks: Block[], opts: PaginateOptions = {}): Page[] {
+  return layout(dt, blocks, opts).pages;
+}
+
+/** Where a printed page begins: the block whose lines start it, and whether it starts partway through that block. */
+export interface PageStart { block: number; mid: boolean }
+
+/** Page starts for pages 2..N, used to draw page breaks on screen. */
+export function pageStarts(dt: DocTypeDef, blocks: Block[]): PageStart[] {
+  return layout(dt, blocks, {}).starts.slice(1);
+}
+
+function layout(dt: DocTypeDef, blocks: Block[], opts: PaginateOptions): { pages: Page[]; starts: PageStart[] } {
   const pages: Page[] = [];
+  const starts: PageStart[] = [];
   let page: Page = [];
+  let cur = 0;
+  let curStarted = false;
   const newPage = () => { if (page.length) pages.push(page); page = []; };
+  // Every line goes through here so we know which block opens each page.
+  const push = (...ls: Page) => {
+    if (!ls.length) return;
+    if (!page.length) starts[pages.length] = { block: cur, mid: curStarted };
+    page.push(...ls);
+    if (ls.some((l) => l !== null)) curStarted = true;
+  };
   const room = () => LINES_PER_PAGE - page.length;
   const speaker = dt.elements.find((e) => e.speaker);
 
@@ -99,6 +121,7 @@ export function paginate(dt: DocTypeDef, blocks: Block[], opts: PaginateOptions 
   });
 
   items.forEach(({ b, el, lines }, idx) => {
+    cur = idx; curStarted = false;
     if (el.speaker) currentSpeaker = blockText(b).toUpperCase().replace(/\s*\(CONT'D\)\s*$/i, '');
     else if (!el.speech) currentSpeaker = null;
     const continuingSpeech = el.speech && dt.moreContd && currentSpeaker !== null &&
@@ -115,38 +138,38 @@ export function paginate(dt: DocTypeDef, blocks: Block[], opts: PaginateOptions 
     }
 
     if (need <= room()) {
-      for (let i = 0; i < gap(); i++) page.push(null);
-      page.push(...lines);
+      for (let i = 0; i < gap(); i++) push(null);
+      push(...lines);
       return;
     }
 
     const usable = room() - gap() - (el.speech && dt.moreContd ? 1 : 0);
     if (el.splittable && page.length && usable >= 2 && lines.length - usable >= 2) {
-      for (let i = 0, g = gap(); i < g; i++) page.push(null);
-      page.push(...lines.slice(0, usable));
-      if (el.speech && dt.moreContd) { const m = moreLine(); if (m) page.push(m); }
+      for (let i = 0, g = gap(); i < g; i++) push(null);
+      push(...lines.slice(0, usable));
+      if (el.speech && dt.moreContd) { const m = moreLine(); if (m) push(m); }
       newPage();
-      if (el.speech && dt.moreContd) { const c = contdLine(); if (c) page.push(c); }
+      if (el.speech && dt.moreContd) { const c = contdLine(); if (c) push(c); }
       let rest = lines.slice(usable);
       while (rest.length > LINES_PER_PAGE - page.length) {
         const n = LINES_PER_PAGE - page.length;
-        page.push(...rest.slice(0, n)); rest = rest.slice(n); newPage();
+        push(...rest.slice(0, n)); rest = rest.slice(n); newPage();
       }
-      page.push(...rest);
+      push(...rest);
       return;
     }
 
     // Move the whole block to the next page.
-    if (continuingSpeech && page.length && room() > 0) { const m = moreLine(); if (m) page.push(m); }
+    if (continuingSpeech && page.length && room() > 0) { const m = moreLine(); if (m) push(m); }
     newPage();
-    if (continuingSpeech) { const c = contdLine(); if (c) page.push(c); }
+    if (continuingSpeech) { const c = contdLine(); if (c) push(c); }
     let rest = lines;
     while (rest.length > LINES_PER_PAGE - page.length) {
       const n = LINES_PER_PAGE - page.length;
-      page.push(...rest.slice(0, n)); rest = rest.slice(n); newPage();
+      push(...rest.slice(0, n)); rest = rest.slice(n); newPage();
     }
-    page.push(...rest);
+    push(...rest);
   });
   newPage();
-  return pages.length ? pages : [[]];
+  return { pages: pages.length ? pages : [[]], starts };
 }

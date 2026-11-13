@@ -5,9 +5,11 @@ import { EditorState, Plugin, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { MutableRefObject, useEffect, useRef, useState } from 'react';
 import { DocTypeDef } from '../doctypes';
+import { PageStart } from '../io/paginate';
 import { Block, Script } from '../model';
 import { enterCommand, hardBreak, setElementType, tabCommand } from './commands';
 import { docToBlocks, nodeToBlock, schema, scriptToDoc } from './schema';
+import { pageBreakKey, pageBreakPlugin } from './pagebreaks';
 import { getSuggestions } from './smarttype';
 
 interface Popup {
@@ -26,17 +28,23 @@ interface Props {
   onChange: (blocks: Block[]) => void;
   onElementChange: (type: string) => void;
   viewRef: MutableRefObject<EditorView | null>;
+  /** Where printed pages 2..N begin, for on-screen page breaks. */
+  pageStarts: PageStart[];
+  /** Screen zoom (CSS zoom on the page); 1 = actual size. */
+  zoom: number;
 }
 
 const SCENE_START_RE = /^(int|ext|est|i\/e|int\.?\/ext)\.\s/i;
 
-export function Editor({ docType, initial, onChange, onElementChange, viewRef }: Props) {
+export function Editor({ docType, initial, onChange, onElementChange, viewRef, pageStarts, zoom }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [popup, setPopup] = useState<Popup | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const dismissed = useRef(false);
   const cb = useRef({ onChange, onElementChange });
   cb.current = { onChange, onElementChange };
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   const show = (p: Popup | null) => { popupRef.current = p; setPopup(p); };
 
@@ -89,6 +97,7 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef }:
       plugins: [
         smartKeys,
         autoDetect,
+        pageBreakPlugin(),
         history(),
         keymap({
           Enter: enterCommand(dt),
@@ -121,11 +130,13 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef }:
       const from = $from.start() + s.from;
       const coords = view.coordsAtPos(from);
       const box = host.current!.getBoundingClientRect();
+      // Screen coordinates are zoomed; the popup is positioned inside the zoomed host.
+      const z = zoomRef.current || 1;
       const prev = popupRef.current;
       const same = prev && prev.items.join() === s.items.join();
       show({
         items: s.items, index: same ? prev!.index : 0, from, to: selection.from, suffix: s.suffix,
-        left: coords.left - box.left, top: coords.bottom - box.top + 2,
+        left: (coords.left - box.left) / z, top: (coords.bottom - box.top) / z + 2,
       });
     };
 
@@ -151,8 +162,14 @@ export function Editor({ docType, initial, onChange, onElementChange, viewRef }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Redraw page breaks whenever the layout changes.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) view.dispatch(view.state.tr.setMeta(pageBreakKey, pageStarts).setMeta('addToHistory', false));
+  }, [pageStarts, viewRef]);
+
   return (
-    <div className="editor-host">
+    <div className="editor-host" style={{ zoom }}>
       <div ref={host} className={`page dt-${docType.id}`} />
       {popup && (
         <ul className="smarttype" style={{ left: popup.left, top: popup.top }} role="listbox">
