@@ -101,14 +101,22 @@ const csvCell = (v: string | number) => {
 };
 
 /** A breakdown sheet as CSV: one row per element per scene. Opens in Excel, Numbers or Google Sheets. */
-export function breakdownCsv(dt: DocTypeDef, script: Script): string {
+export function breakdownCsv(
+  dt: DocTypeDef, script: Script,
+  /** Each character's wardrobe for a scene, from their profile (src/characters/profiles.ts). */
+  wardrobe?: (scene: SceneRange, scenes: SceneRange[]) => { item: TagItem; wardrobe: string }[],
+): string {
   const items = script.tags ?? [];
   const rows: (string | number)[][] = [['Scene', 'Scene heading', 'Category', 'Element', 'Mentions', 'Notes']];
-  for (const s of sceneRanges(dt, script.blocks)) {
+  const scenes = sceneRanges(dt, script.blocks);
+  for (const s of scenes) {
     for (const g of sceneBreakdown(s, script.blocks, items).groups) {
       for (const { item, count } of g.items) {
         rows.push([s.num || '', s.heading, getCategory(g.category).name, item.name, count, item.notes ?? '']);
       }
+    }
+    for (const w of wardrobe?.(s, scenes) ?? []) {
+      rows.push([s.num || '', s.heading, getCategory('wardrobe').name, `${w.item.name}: ${w.wardrobe}`, '', 'From character profile']);
     }
   }
   return rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';

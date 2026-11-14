@@ -33,6 +33,54 @@ export interface TagItem {
   notes?: string;
 }
 
+/**
+ * Points at a scene by its number and heading text. Scenes have no ids, so a
+ * reference is matched by heading first (nearest number wins) and kept up to
+ * date as the script changes; see src/characters/profiles.ts.
+ */
+export interface SceneRef { num: number; heading: string }
+
+export interface ArcBeat { id: string; text: string; scene?: SceneRef }
+
+/** How this character relates to another one (by the other's Cast item id). */
+export interface Relationship { id: string; to: string; kind: string; notes?: string }
+
+/** The character's notes and wardrobe for one scene. */
+export interface SceneNote { scene: SceneRef; note?: string; wardrobe?: string }
+
+/**
+ * A character's profile. It belongs to the character's Cast tag item, so
+ * renaming the character in the breakdown or with Rename everywhere keeps it.
+ * Profiles are writer's notes: they are never printed or exported with the script.
+ */
+export interface CharacterProfile {
+  /** Id of the character's Cast tag item. */
+  itemId: string;
+  /** Other names the script uses for them ("Mara", "Mom"), found as mentions too. */
+  aliases?: string[];
+  role?: string;
+  age?: string;
+  occupation?: string;
+  look?: string;
+  personality?: string;
+  voice?: string;
+  want?: string;
+  need?: string;
+  desire?: string;
+  fear?: string;
+  flaws?: string[];
+  strengths?: string[];
+  background?: string;
+  wound?: string;
+  secret?: string;
+  arcStart?: string;
+  arcEnd?: string;
+  arcBeats?: ArcBeat[];
+  relationships?: Relationship[];
+  scenes?: SceneNote[];
+  notes?: string;
+}
+
 export interface TitlePage {
   title: string;
   credit: string;
@@ -48,6 +96,8 @@ export interface Script {
   blocks: Block[];
   /** Breakdown elements tagged in this script. Missing in older files. */
   tags?: TagItem[];
+  /** Character profiles, one per Cast item that has one. Missing in older files. */
+  characters?: CharacterProfile[];
 }
 
 export const emptyTitlePage = (): TitlePage => ({

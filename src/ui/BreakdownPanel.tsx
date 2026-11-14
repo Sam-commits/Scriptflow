@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { DocTypeDef } from '../doctypes';
 import { Block, TagItem } from '../model';
-import { countTags, findItem, sceneAt, sceneBreakdown, sceneRanges, scenesByItem } from '../tags/breakdown';
+import { SceneRange, countTags, findItem, sceneAt, sceneBreakdown, sceneRanges, scenesByItem } from '../tags/breakdown';
 import { TAG_CATEGORIES, getCategory } from '../tags/categories';
 
 interface Props {
@@ -23,6 +23,10 @@ interface Props {
   onDeleteItem: (id: string) => void;
   onAutoCast: () => void;
   onExportCsv: () => void;
+  /** Open a Cast item's character profile. */
+  onOpenProfile?: (id: string) => void;
+  /** Each character's wardrobe for a scene, from their profile. */
+  wardrobe?: (scene: SceneRange) => { item: TagItem; wardrobe: string }[];
   onClose: () => void;
 }
 
@@ -92,6 +96,9 @@ function SceneTab(p: Props & { scene: ReturnType<typeof sceneAt> }) {
                 <button className="bd-item" onClick={() => p.onFind(item.id, [scene.start, scene.end])} title="Show in script">
                   <span>{item.name}</span>{count > 1 && <small>×{count}</small>}
                 </button>
+                {item.category === 'cast' && p.onOpenProfile && (
+                  <button className="bd-x" title="Character profile" aria-label={`${item.name}'s profile`} onClick={() => p.onOpenProfile!(item.id)}>ⓘ</button>
+                )}
                 {sceneLevel && (
                   <button className="bd-x" title="Remove from scene (not in the text)" aria-label={`Remove ${item.name} from scene`}
                     onClick={() => p.onRemoveSceneTag(scene.start, item.id)}>×</button>
@@ -101,6 +108,23 @@ function SceneTab(p: Props & { scene: ReturnType<typeof sceneAt> }) {
           </ul>
         </section>
       ))}
+      {(() => {
+        const w = p.wardrobe?.(scene) ?? [];
+        return w.length > 0 && (
+          <section className="bd-group">
+            <h3><Dot category="wardrobe" />Character wardrobe</h3>
+            <ul>
+              {w.map(({ item, wardrobe }) => (
+                <li key={item.id}>
+                  <button className="bd-item" onClick={() => p.onOpenProfile?.(item.id)} title="Edit in the character's profile">
+                    <span><b>{item.name}</b>: {wardrobe}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
       {canSceneTag && (
         <form className="bd-add" onSubmit={(e) => { e.preventDefault(); add(); }}>
           <h3>Add to this scene</h3>
@@ -154,6 +178,9 @@ function AllTab(p: Props) {
                     <span>{i.name}</span>
                     <small>{counts.get(i.id) ? `sc. ${(scenes.get(i.id) ?? []).map((n) => n || '–').join(', ')}` : 'unused'}</small>
                   </button>
+                  {i.category === 'cast' && p.onOpenProfile && (
+                    <button className="bd-x" title="Character profile" aria-label={`${i.name}'s profile`} onClick={() => p.onOpenProfile!(i.id)}>ⓘ</button>
+                  )}
                   <button className="bd-x" aria-label={`Edit ${i.name}`} title="Rename, recategorize or delete" onClick={() => setEditing(i.id)}>✎</button>
                 </li>
               ))}
