@@ -1,4 +1,4 @@
-import { Block, Run, Script, TitlePage, blockText, emptyTitlePage, normalizeRuns } from '../model';
+import { Block, Run, Script, TitlePage, blockText, emptyTitlePage, normalizeRuns, printedRuns } from '../model';
 
 // Fountain (https://fountain.io) is a plain-text screenplay format. It's the
 // format we'll keep scripts in on GitHub, because plain text diffs cleanly.
@@ -40,7 +40,7 @@ export function parseEmphasis(text: string): Run[] {
 }
 
 export function emphasisToFountain(runs: Run[]): string {
-  return runs.map((r) => {
+  return printedRuns(runs).map((r) => {
     let t = r.text.replace(/([*_\\])/g, '\\$1');
     if (r.underline) t = `_${t}_`;
     if (r.bold && r.italic) t = `***${t}***`;
