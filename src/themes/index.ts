@@ -8,7 +8,7 @@ export * from './types';
 export * from './settings';
 export { accents } from './accents';
 export { builtinThemes } from './builtin';
-export { TAG_PALETTE, tagColorOn } from './tagColors';
+export { HUE_IDS, TAG_HUES, tagColorOn } from './tagColors';
 
 export const themesFor = (mode: ThemeMode) => builtinThemes.filter((t) => t.mode === mode);
 

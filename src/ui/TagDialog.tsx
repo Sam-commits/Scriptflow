@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { TagItem } from '../model';
 import { findItem } from '../tags/breakdown';
-import { TAG_CATEGORIES, getCategory } from '../tags/categories';
+import { TagCategory, getCategory, rememberCategory, tagColor, visibleTypes } from '../tags/categories';
 
 export interface TagRequest {
   category: string;
@@ -17,19 +17,23 @@ interface Props {
   /** How many other untagged-or-tagged mentions of the text exist outside the selection. */
   otherMentions: number;
   items: TagItem[];
+  /** Every tag type; hidden ones aren't offered. */
+  tagTypes: TagCategory[];
+  /** Create a custom tag type and return its id. */
+  onAddType: (name: string) => string;
   initialCategory: string;
   onTag: (r: TagRequest) => void;
   onClose: () => void;
 }
 
-const LAST_KEY = 'scriptflow:last-tag-category';
-export const lastCategory = () => {
-  try { return localStorage.getItem(LAST_KEY) || 'props'; } catch { return 'props'; }
-};
+export { lastCategory } from '../tags/categories';
 
 /** Pick a category and element name for the selected text. */
-export function TagDialog({ text, otherMentions, items, initialCategory, onTag, onClose }: Props) {
-  const [category, setCategory] = useState(initialCategory);
+export function TagDialog({ text, otherMentions, items, tagTypes, onAddType, initialCategory, onTag, onClose }: Props) {
+  const shown = visibleTypes(tagTypes);
+  const [category, setCategory] = useState(shown.some((c) => c.id === initialCategory) ? initialCategory : shown[0]?.id ?? 'props');
+  const [newType, setNewType] = useState<string | null>(null);
+  const type = getCategory(category, tagTypes);
   const clean = text.replace(/\s+/g, ' ').trim();
   const [name, setName] = useState(clean);
   const [notes, setNotes] = useState('');
@@ -42,7 +46,7 @@ export function TagDialog({ text, otherMentions, items, initialCategory, onTag, 
 
   const pick = (id: string) => {
     setCategory(id);
-    try { localStorage.setItem(LAST_KEY, id); } catch { /* ignore */ }
+    rememberCategory(id);
   };
 
   const submit = () => {
@@ -59,7 +63,7 @@ export function TagDialog({ text, otherMentions, items, initialCategory, onTag, 
           if (e.key === 'Escape') onClose();
           // Alt+1..9 picks a category without leaving the name field.
           if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
-            const c = TAG_CATEGORIES[Number(e.code.slice(5)) - 1];
+            const c = shown[Number(e.code.slice(5)) - 1];
             if (c) { e.preventDefault(); pick(c.id); }
           }
         }}
@@ -67,25 +71,43 @@ export function TagDialog({ text, otherMentions, items, initialCategory, onTag, 
         <h2>Tag “{clean.length > 60 ? clean.slice(0, 60) + '…' : clean}”</h2>
         <fieldset className="tag-cats">
           <legend className="sr-only">Category</legend>
-          {TAG_CATEGORIES.map((c, i) => (
+          {shown.map((c, i) => (
             <button
               key={c.id} type="button" className={`tag-cat${c.id === category ? ' on' : ''}`}
               aria-pressed={c.id === category} title={`${c.hint}${i < 9 ? ` (Alt+${i + 1})` : ''}`}
               onClick={() => pick(c.id)}
             >
-              <span className="dot" style={{ background: `var(--tag-${c.id}-ui)` }} />{c.name}
+              <span className="dot" style={{ background: tagColor(c, '-ui') }} />{c.name}
             </button>
           ))}
+          {newType === null ? (
+            <button type="button" className="tag-cat add" onClick={() => setNewType('')} title="Make your own tag type">+ New type</button>
+          ) : (
+            <span className="tag-cat-new">
+              <input
+                autoFocus aria-label="New tag type name" placeholder="Type name" value={newType}
+                onChange={(e) => setNewType(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (newType.trim()) { pick(onAddType(newType)); setNewType(null); }
+                  }
+                  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setNewType(null); }
+                }}
+              />
+              <button type="button" disabled={!newType.trim()} onClick={() => { pick(onAddType(newType)); setNewType(null); }}>Add</button>
+            </span>
+          )}
         </fieldset>
-        <p className="hint">{getCategory(category).hint}</p>
+        {type.hint && <p className="hint">{type.hint}</p>}
         <label>
           <span>Element name</span>
           <input autoFocus list="tag-names" value={name} onChange={(e) => setName(e.target.value)} />
           <datalist id="tag-names">{inCategory.map((i) => <option key={i.id} value={i.name} />)}</datalist>
         </label>
         <p className="hint">
-          {existing ? `Adds to the existing ${getCategory(category).name.toLowerCase()} element “${existing.name}”.`
-            : `Creates a new ${getCategory(category).name.toLowerCase()} element.`}
+          {existing ? `Adds to the existing ${type.name.toLowerCase()} element “${existing.name}”.`
+            : `Creates a new ${type.name.toLowerCase()} element.`}
         </p>
         {!existing && (
           <label>

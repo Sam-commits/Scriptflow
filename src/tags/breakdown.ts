@@ -1,6 +1,6 @@
 import { DocTypeDef, getElement } from '../doctypes';
 import { Block, Script, TagItem, blockText } from '../model';
-import { TAG_CATEGORIES, getCategory } from './categories';
+import { TAG_CATEGORIES, TagCategory, allTagTypes, getCategory } from './categories';
 
 /** Names compare without case or extra spaces: "the Watch" is the same item as "THE WATCH". */
 export const normName = (s: string) => s.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -70,11 +70,18 @@ export interface SceneBreakdown {
 
 const byName = (a: TagItem, b: TagItem) => a.name.localeCompare(b.name);
 
-export function sceneBreakdown(scene: SceneRange, blocks: Block[], items: TagItem[]): SceneBreakdown {
+/** Types in display order, plus any category an item uses that isn't in the list (shown as "Other"). */
+export function typesInUse(types: TagCategory[], items: TagItem[]): TagCategory[] {
+  const known = new Set(types.map((t) => t.id));
+  const extra = [...new Set(items.map((i) => i.category).filter((c) => !known.has(c)))].map((c) => getCategory(c, types));
+  return [...types, ...extra];
+}
+
+export function sceneBreakdown(scene: SceneRange, blocks: Block[], items: TagItem[], types: TagCategory[] = TAG_CATEGORIES): SceneBreakdown {
   const slice = blocks.slice(scene.start, scene.end);
   const counts = countTags(slice);
   const sceneLevel = new Set(blocks[scene.start]?.tags ?? []);
-  const groups = TAG_CATEGORIES.map((c) => ({
+  const groups = typesInUse(types, items).map((c) => ({
     category: c.id,
     items: items.filter((i) => i.category === c.id && counts.has(i.id)).sort(byName)
       .map((item) => ({ item, count: counts.get(item.id)!, sceneLevel: sceneLevel.has(item.id) })),
@@ -103,11 +110,12 @@ const csvCell = (v: string | number) => {
 /** A breakdown sheet as CSV: one row per element per scene. Opens in Excel, Numbers or Google Sheets. */
 export function breakdownCsv(dt: DocTypeDef, script: Script): string {
   const items = script.tags ?? [];
+  const types = allTagTypes(script);
   const rows: (string | number)[][] = [['Scene', 'Scene heading', 'Category', 'Element', 'Mentions', 'Notes']];
   for (const s of sceneRanges(dt, script.blocks)) {
-    for (const g of sceneBreakdown(s, script.blocks, items).groups) {
+    for (const g of sceneBreakdown(s, script.blocks, items, types).groups) {
       for (const { item, count } of g.items) {
-        rows.push([s.num || '', s.heading, getCategory(g.category).name, item.name, count, item.notes ?? '']);
+        rows.push([s.num || '', s.heading, getCategory(g.category, types).name, item.name, count, item.notes ?? '']);
       }
     }
   }

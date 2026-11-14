@@ -1,3 +1,5 @@
+import type { TagCategory } from './tags/categories';
+
 /**
  * Format-neutral script model shared by importers, exporters and the PDF
  * paginator. The editor converts to/from this with `toScript` / `fromScript`.
@@ -48,6 +50,10 @@ export interface Script {
   blocks: Block[];
   /** Breakdown elements tagged in this script. Missing in older files. */
   tags?: TagItem[];
+  /** Tag types the writer added for this script (see src/tags/categories.ts). */
+  tagTypes?: TagCategory[];
+  /** Built-in tag types the writer hid from the pickers. */
+  hiddenTagTypes?: string[];
 }
 
 export const emptyTitlePage = (): TitlePage => ({
