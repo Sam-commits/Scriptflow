@@ -11,10 +11,12 @@ import {
 import { download, NATIVE_EXT, parseFile, safeName, toFdx, toFountain } from './io/files';
 import { paginate, pageStarts } from './io/paginate';
 import { scriptToPdf } from './io/pdf';
-import { Block, Script, TagItem, TitlePage, blockText } from './model';
+import { Block, CharacterProfile, Script, TagItem, TitlePage, blockText } from './model';
 import { sampleScreenplay } from './sample';
 import { ScriptMeta, blankScript, deleteScript, listScripts, loadScript, newId, saveScript } from './storage';
-import { breakdownCsv, findItem } from './tags/breakdown';
+import { breakdownCsv, findItem, sceneRanges } from './tags/breakdown';
+import { dropCharacter, healProfiles, mergeCharacter, profileHasContent, profilesMarkdown, sceneWardrobe, upsertProfile } from './characters/profiles';
+import { CharactersPanel } from './ui/CharactersPanel';
 import { AppearanceDialog } from './ui/AppearanceDialog';
 import { BreakdownPanel } from './ui/BreakdownPanel';
 import { TagDialog, TagRequest, lastCategory } from './ui/TagDialog';
@@ -37,6 +39,8 @@ import { useAssist } from './ui/useAssist';
 const LAST = 'scriptflow:last';
 const PANEL = 'scriptflow:breakdown-open';
 
+type PanelKind = 'breakdown' | 'characters' | null;
+
 interface PendingTag { range: Range; text: string; others: Range[] }
 
 function initial(): { id: string; script: Script } {
@@ -57,7 +61,11 @@ export function App() {
   const scriptRef = useRef(script);
   scriptRef.current = script;
   const [pendingTag, setPendingTag] = useState<PendingTag | null>(null);
-  const [panelOpen, setPanelOpen] = useState(() => { try { return localStorage.getItem(PANEL) === '1'; } catch { return false; } });
+  const [panel, setPanel] = useState<PanelKind>(() => {
+    try { const v = localStorage.getItem(PANEL); return v === '1' ? 'breakdown' : v === 'characters' ? 'characters' : null; } catch { return null; }
+  });
+  const panelOpen = panel === 'breakdown';
+  const [characterId, setCharacterId] = useState<string | null>(null);
   const [cursor, setCursor] = useState<{ index: number; tags: string[]; empty: boolean; atEnd: boolean }>({ index: 0, tags: [], empty: false, atEnd: true });
   const [focusId, setFocusId] = useState<string | null>(null);
   const [library, setLibrary] = useState<ScriptMeta[]>(listScripts);
@@ -109,6 +117,7 @@ export function App() {
     setScript(s);
     setLibrary(listScripts());
     setFocusId(null);
+    setCharacterId(null);
   };
 
   const createNew = (docType: string) => {
@@ -192,6 +201,21 @@ export function App() {
     (view.domAtPos(pos).node as HTMLElement).parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   };
 
+  /** Select characters [from, to) of element `index`'s text, or just go to the element. */
+  const jumpToText = (index: number, from?: number, to?: number) => {
+    const view = viewRef.current;
+    if (!view || from === undefined || to === undefined) { jumpTo(index); return; }
+    const doc = view.state.doc;
+    let start = -1;
+    doc.forEach((n, offset, i) => { if (i === index) start = offset + 1; });
+    if (start < 0) return;
+    const max = start + doc.child(index).content.size;
+    const a = Math.min(start + from, max), b = Math.min(start + to, max);
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(doc, a, b)).scrollIntoView());
+    view.focus();
+    (view.domAtPos(a).node as HTMLElement).parentElement?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  };
+
   const changeElement = (type: string) => {
     const view = viewRef.current;
     if (!view) return;
@@ -202,6 +226,8 @@ export function App() {
   // ---- Tagging -------------------------------------------------------------
   const items = script.tags ?? [];
   const setItems = (next: TagItem[]) => persist((s) => ({ ...s, tags: next }));
+  const profiles = script.characters ?? [];
+  const setProfiles = (fn: (list: CharacterProfile[]) => CharacterProfile[]) => persist((s) => ({ ...s, characters: fn(s.characters ?? []) }));
 
   const openTagDialog = () => {
     const view = viewRef.current;
@@ -285,13 +311,19 @@ export function App() {
       // Renamed into an element that already exists: move its tags over.
       setItems(items.filter((i) => i.id !== itemId));
       dispatchTag((st) => mergeTag(st, itemId, clash.id));
+      if (profiles.some((x) => x.itemId === itemId)) setProfiles((l) => mergeCharacter(l, itemId, clash.id));
+      if (characterId === itemId) setCharacterId(clash.id);
     } else {
       setItems(items.map((i) => (i.id === itemId ? next : i)));
     }
   };
 
   const deleteItem = (itemId: string) => {
+    const prof = profiles.find((x) => x.itemId === itemId);
+    if (profileHasContent(prof) && !confirm('This character has a profile. Deleting the Cast element deletes the profile too.')) return;
     setItems(items.filter((i) => i.id !== itemId));
+    if (prof || profiles.some((x) => x.relationships?.some((r) => r.to === itemId))) setProfiles((l) => dropCharacter(l, itemId));
+    if (characterId === itemId) setCharacterId(null);
     dispatchTag((st) => removeTagEverywhere(st, itemId));
     if (focusId === itemId) setFocusId(null);
   };
@@ -304,10 +336,35 @@ export function App() {
     view.dispatch(tr);
   };
 
-  const togglePanel = (open = !panelOpen) => {
-    setPanelOpen(open);
-    try { localStorage.setItem(PANEL, open ? '1' : '0'); } catch { /* ignore */ }
+  const showPanel = (next: PanelKind) => {
+    setPanel(next);
+    try { localStorage.setItem(PANEL, next === 'breakdown' ? '1' : next ?? '0'); } catch { /* ignore */ }
   };
+  const togglePanel = (open = !panelOpen) => showPanel(open ? 'breakdown' : null);
+
+  // ---- Characters ------------------------------------------------------------
+  const scenes = useMemo(() => sceneRanges(dt, script.blocks), [dt, script.blocks]);
+
+  // Keep scene notes and turning points pointing at the right scene as scenes move or get renamed.
+  useEffect(() => {
+    const cur = scriptRef.current.characters;
+    if (!cur?.length) return;
+    const healed = healProfiles(cur, scenes);
+    if (healed !== cur) persist((s) => ({ ...s, characters: healProfiles(s.characters ?? [], scenes) }));
+  }, [scenes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The Cast item for a name, created if needed. */
+  const ensureCast = (name: string): string => {
+    const n = name.trim().toUpperCase();
+    const found = findItem(scriptRef.current.tags ?? [], 'cast', n);
+    if (found) return found.id;
+    const item: TagItem = { id: newId(), category: 'cast', name: n };
+    persist((s) => ({ ...s, tags: [...(s.tags ?? []), item] }));
+    return item.id;
+  };
+
+  const openProfile = (itemId: string | null) => { setCharacterId(itemId); showPanel('characters'); };
+  const toggleCharacters = () => showPanel(panel === 'characters' ? null : 'characters');
 
   // Each tag item takes its category's theme colors.
   const tagStyle = useMemo(() => items.map((i) => {
@@ -422,12 +479,16 @@ export function App() {
     if (kind === 'pdf') scriptToPdf(script, { sceneNumbers }).save(`${name}.pdf`);
     if (kind === 'fountain') download(`${name}.fountain`, toFountain(script));
     if (kind === 'fdx') download(`${name}.fdx`, toFdx(script), 'application/xml');
-    if (kind === 'csv') download(`${name} breakdown.csv`, breakdownCsv(dt, scriptRef.current), 'text/csv');
+    if (kind === 'csv') {
+      const cur = scriptRef.current;
+      download(`${name} breakdown.csv`, breakdownCsv(dt, cur, (sc, all) => sceneWardrobe(cur, sc, all)), 'text/csv');
+    }
+    if (kind === 'characters') download(`${name} characters.md`, profilesMarkdown(scriptRef.current, sceneRanges(dt, scriptRef.current.blocks)), 'text/markdown');
     if (kind === 'native') download(`${name}${NATIVE_EXT}`, JSON.stringify(script, null, 2), 'application/json');
   };
 
   return (
-    <div className={`app view-${look.settings.pageView}${look.settings.pageShadow ? '' : ' no-shadow'}${look.settings.pageNumbers ? '' : ' no-page-numbers'}${look.settings.showTags ? ' tags-on' : ''}${panelOpen ? ' with-panel' : ''}${assist.settings.elementGuide !== 'off' ? ' notes-on' : ''}`}>
+    <div className={`app view-${look.settings.pageView}${look.settings.pageShadow ? '' : ' no-shadow'}${look.settings.pageNumbers ? '' : ' no-page-numbers'}${look.settings.showTags ? ' tags-on' : ''}${panel ? ' with-panel' : ''}${panel === 'characters' ? ' wide-panel' : ''}${assist.settings.elementGuide !== 'off' ? ' notes-on' : ''}`}>
       <style>{css}</style>
       <style>{tagStyle}</style>
       <header className="topbar">
@@ -446,6 +507,8 @@ export function App() {
         </label>
         <button onMouseDown={(e) => e.preventDefault()} onClick={openTagDialog} title="Tag the selected text as a prop, character, location, shot… (Ctrl/⌘+Shift+E)">Tag</button>
         <button className={panelOpen ? 'on' : ''} aria-pressed={panelOpen} onClick={() => togglePanel()} title="Breakdown of tagged elements">Breakdown</button>
+        <button className={panel === 'characters' ? 'on' : ''} aria-pressed={panel === 'characters'} onClick={toggleCharacters}
+          title="Character profiles: wants, needs, flaws, arcs, relationships and where each one appears">Characters</button>
         <button onClick={() => setAssistOpen(true)} title="Writing assistant level and settings">
           Assist: {levelName(assist.config)}
         </button>
@@ -468,6 +531,7 @@ export function App() {
             <option value="fdx">Final Draft (.fdx)</option>
             <option value="fountain" disabled={!dt.fountain}>Fountain{dt.fountain ? '' : ' (screenplays only)'}</option>
             <option value="csv" disabled={!items.length}>Breakdown (.csv)</option>
+            <option value="characters" disabled={!profiles.some(profileHasContent)}>Character profiles (.md)</option>
             <option value="native">Scriptflow file</option>
           </select>
         </label>
@@ -553,7 +617,28 @@ export function App() {
           onDeleteItem={deleteItem}
           onAutoCast={autoCast}
           onExportCsv={() => exportAs('csv')}
+          onOpenProfile={openProfile}
+          wardrobe={(sc) => sceneWardrobe(script, sc, scenes)}
           onClose={() => togglePanel(false)}
+        />
+      )}
+
+      {panel === 'characters' && (
+        <CharactersPanel
+          dt={dt}
+          blocks={script.blocks}
+          items={items}
+          profiles={profiles}
+          cursorIndex={cursor.index}
+          selected={characterId}
+          onSelect={setCharacterId}
+          onUpdate={(itemId, fn) => setProfiles((l) => upsertProfile(l, itemId, fn))}
+          onClear={(itemId) => setProfiles((l) => l.filter((x) => x.itemId !== itemId))}
+          onEnsureCast={ensureCast}
+          onAutoCast={autoCast}
+          onJump={jumpToText}
+          onExport={() => exportAs('characters')}
+          onClose={() => showPanel(null)}
         />
       )}
 
