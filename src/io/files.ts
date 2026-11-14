@@ -22,7 +22,7 @@ export function parseFile(name: string, text: string): Script {
   if (lower.endsWith('.fdx')) return parseFdx(text);
   if (lower.endsWith(NATIVE_EXT) || lower.endsWith('.json')) {
     const s = JSON.parse(text) as Script;
-    if (!s || !Array.isArray(s.blocks) || !s.docType) throw new Error('This is not a Scriptflow file.');
+    if (!s || !Array.isArray(s.blocks) || !s.docType) throw new Error('This is not a Right Write Wright (.scriptflow) file.');
     return s;
   }
   return parseFountain(text);
