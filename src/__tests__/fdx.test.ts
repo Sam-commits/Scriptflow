@@ -13,7 +13,8 @@ describe('fdx', () => {
     expect(again.docType).toBe('screenplay');
     expect(again.titlePage.title).toBe('THE LIGHTHOUSE KEEPER');
     expect(again.titlePage.author).toBe('Your Name');
-    expect(again.blocks).toEqual(s.blocks);
+    // Margin notes are never exported.
+    expect(again.blocks).toEqual(s.blocks.map(({ note: _n, ...b }) => b));
   });
 
   it('detects stageplays', () => {

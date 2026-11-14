@@ -287,3 +287,105 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
   .workspace { padding: 12px 0 60px; }
   .theme-grid, .view-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Writing assistant (src/assist/, src/editor/assistPlugins.ts) */
+.smarttype.slash { min-width: 280px; font: 13px/1.3 Inter, system-ui, sans-serif; }
+.smarttype li small { display: block; color: var(--muted); font-size: 11px; }
+.smarttype li.active small { color: inherit; opacity: .85; }
+.page .ghost { color: var(--page-muted); opacity: .75; pointer-events: none; user-select: none; }
+.page .ProseMirror > p.hint::before {
+  content: attr(data-hint); float: left; height: 0; pointer-events: none; user-select: none;
+  color: var(--page-muted); opacity: .7; font-style: italic; text-transform: none; text-decoration: none;
+}
+.page .coach { text-decoration: underline dotted var(--page-muted); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.page .coach.serious { text-decoration: underline wavy var(--accent); text-decoration-thickness: 1px; }
+/* Margin notes: the annotated example and scene notes. Noted scene headings get a small
+   marker in the margin; the element with the cursor shows its note in full. Hover shows any note. */
+.page .ProseMirror > p[data-note] { position: relative; }
+@media (min-width: 1400px) {
+  .notes-on:not(.with-panel) .page .ProseMirror > p[data-note]:is(.el-scene_heading, .el-scene, .el-act, .cursor-el)::before {
+    content: 'Note'; position: absolute; top: 0; left: calc(8.5in - var(--el-left, 1.5in) + 16px);
+    font: 10px/1.6 Inter, system-ui, sans-serif; color: var(--muted); text-transform: none; font-style: normal;
+    font-weight: normal; text-decoration: none; text-align: left; border-left: 2px solid var(--panel-border);
+    padding-left: 6px; pointer-events: none; user-select: none;
+  }
+  .notes-on:not(.with-panel) .page .ProseMirror > p[data-note].cursor-el::before {
+    content: attr(data-note); width: 190px; z-index: 2; font-size: 11px; line-height: 1.35; white-space: pre-wrap;
+    color: var(--text); background: var(--bg); border-left-color: var(--accent); padding: 4px 8px;
+  }
+}
+.statusbar .guide { display: flex; gap: 10px; min-width: 0; }
+.statusbar .guide b { font-weight: 600; color: var(--text); }
+.statusbar .coach-tip { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42ch; }
+.statusbar .coach-tip.serious { color: var(--accent); }
+.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.error-text { color: var(--error); margin: 0; font-size: 12px; }
+
+.level-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.level-grid.three { grid-template-columns: repeat(3, 1fr); }
+.level-card { display: grid; gap: 4px; align-content: start; text-align: left; padding: 10px; border-radius: 10px; background: var(--bg); }
+.level-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.level-card small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.modal.assist, .modal.level-picker { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; gap: 14px; }
+.modal.assist fieldset { border: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.modal.assist legend, .modal.scene-builder legend { font-weight: 600; font-size: 13px; margin-bottom: 6px; padding: 0; }
+.modal.assist fieldset:disabled { opacity: .75; }
+.assist-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+.assist-row { display: grid !important; gap: 4px; color: var(--text) !important; font-size: 13px !important; }
+.segmented.small button { padding: 3px 9px; font-size: 12px; }
+.num-input { display: inline-flex; gap: 6px; align-items: center; }
+.num-input input { width: 80px; }
+.custom-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.custom-bar select { max-width: 200px; }
+.custom-bar input { width: 170px; background: var(--bg); border: 1px solid var(--panel-border); border-radius: 6px; padding: 5px 8px; color: var(--text); }
+.custom-bar .spacer { flex: 1; }
+.modal-actions { flex-wrap: wrap; }
+
+.modal.names { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
+.modal.names h3 { font-size: 13px; margin: 6px 0; }
+.names-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.names-list li { display: flex; align-items: center; gap: 10px; padding: 3px 6px; border-radius: 6px; }
+.names-list li:hover { background: var(--bg); }
+.names-list .name { font: 600 12px/1.4 'Courier Prime', 'Courier New', monospace; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.names-list small { color: var(--muted); font-size: 11px; }
+.rename-form { display: flex; gap: 6px; flex: 1; }
+.rename-form input { flex: 1; min-width: 0; }
+.add-row { display: flex !important; gap: 6px; align-items: center; margin-top: 6px; }
+.add-row input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--panel-border); border-radius: 6px; padding: 5px 8px; color: var(--text); }
+
+.modal.scene-builder { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; gap: 12px; }
+.modal.scene-builder fieldset { border: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.modal.scene-builder label.inline { display: flex; align-items: center; gap: 8px; }
+.modal.scene-builder label.inline input { width: 80px; }
+.sb-grid { display: grid; grid-template-columns: 1fr 280px; gap: 18px; }
+.sb-cast { display: flex; flex-wrap: wrap; gap: 6px; }
+.sb-cast b { margin-right: 5px; font-size: 10px; background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 5px; }
+.sb-structures { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sb-notes { display: grid; gap: 6px; }
+.sb-notes input { width: 100%; }
+.sb-preview { background: var(--bg); border-radius: 10px; padding: 10px; align-self: start; position: sticky; top: 0; }
+.sb-preview h3 { margin: 0 0 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.sb-preview ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font: 11px/1.3 'Courier Prime', 'Courier New', monospace; }
+.sb-preview small { display: block; font: 10px/1.2 Inter, system-ui, sans-serif; color: var(--muted); }
+.sb-preview .pv-hint { color: var(--muted); font-style: italic; }
+.sb-preview .pv-character, .sb-preview .pv-dialogue { padding-left: 24px; }
+
+.tour {
+  position: fixed; right: 20px; bottom: 48px; z-index: 18; width: min(340px, calc(100vw - 40px));
+  background: var(--panel); border: 1px solid var(--panel-border); border-left: 4px solid var(--accent); border-radius: 12px;
+  padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.2); display: grid; gap: 6px;
+}
+.tour h3 { margin: 0; font-size: 15px; }
+.tour p { margin: 0; font-size: 13px; line-height: 1.45; }
+.tour-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; }
+.tour .primary { justify-self: end; }
+.tour-dots { display: flex; gap: 6px; list-style: none; margin: 4px 0 0; padding: 0; }
+.tour-dots li { width: 8px; height: 8px; border-radius: 50%; background: var(--panel-border); }
+.tour-dots li.done { background: var(--accent); opacity: .5; }
+.tour-dots li.now { background: var(--accent); }
+
+@media (max-width: 900px) {
+  .level-grid, .level-grid.three { grid-template-columns: 1fr 1fr; }
+  .assist-groups, .sb-grid { grid-template-columns: 1fr; }
+  .statusbar .guide span, .statusbar .coach-tip { display: none; }
+}

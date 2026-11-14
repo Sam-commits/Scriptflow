@@ -18,6 +18,10 @@ export interface Block {
   /** Tag items attached to the whole block without marking any text. Used on
    *  scene headings for elements a scene needs that the script never mentions. */
   tags?: string[];
+  /** Grey placeholder shown while the element is empty (from the scene builder). Never printed. */
+  hint?: string;
+  /** A writer's note on the element, e.g. a scene's goal, conflict and turn. Never printed. */
+  note?: string;
 }
 
 /** One breakdown element: a character, prop, location, shot and so on. */
