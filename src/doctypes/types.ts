@@ -45,6 +45,10 @@ export interface ElementDef {
   /** Always begins a new page when printed. */
   pageBreakBefore?: boolean;
   smartType?: SmartTypeKind;
+  /** Grey prompt shown in an empty element of this kind (Beginner hints). */
+  hint?: string;
+  /** One line on what the element is for, for the status-bar element guide. */
+  help?: string;
   /** Name used in Final Draft (.fdx) files. */
   fdxName: string;
 }

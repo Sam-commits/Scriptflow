@@ -48,11 +48,15 @@ describe('editor commands', () => {
 
 describe('smarttype', () => {
   const others = [b('scene_heading', 'INT. KITCHEN - DAY'), b('character', 'MARA'), b('character', 'Mara (V.O.)'), b('character', 'MAX')];
+  const at = (type: string, before: string) => {
+    const blocks = [...others, b(type, before)];
+    return getSuggestions({ dt: screenplay, blocks, index: blocks.length - 1, before });
+  };
   it('suggests characters by frequency', () => {
-    expect(getSuggestions(screenplay, 'character', 'ma', others)?.items).toEqual(['MARA', 'MAX']);
+    expect(at('character', 'ma')?.items.map((i) => i.text)).toEqual(['MARA', 'MAX']);
   });
   it('suggests locations then times in scene headings', () => {
-    expect(getSuggestions(screenplay, 'scene_heading', 'int. k', others)).toMatchObject({ from: 5, items: ['KITCHEN'], suffix: ' - ' });
-    expect(getSuggestions(screenplay, 'scene_heading', 'INT. KITCHEN - N', others)?.items).toEqual(['NIGHT']);
+    expect(at('scene_heading', 'int. k')).toMatchObject({ from: 5, items: [{ text: 'KITCHEN', suffix: ' - ' }] });
+    expect(at('scene_heading', 'INT. KITCHEN - N')?.items).toEqual([{ text: 'NIGHT' }]);
   });
 });

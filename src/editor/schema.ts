@@ -8,19 +8,25 @@ export const schema = new Schema({
     doc: { content: 'element+' },
     element: {
       // `tags`: tag item ids attached to the whole element (scene-level tags).
-      attrs: { type: { default: 'action' }, tags: { default: null } },
+      // `hint`: grey placeholder while empty; `note`: a writer's note. Neither is printed.
+      attrs: { type: { default: 'action' }, tags: { default: null }, hint: { default: null }, note: { default: null } },
       content: 'inline*',
       marks: '_',
       parseDOM: [{
         tag: 'p[data-type]',
         getAttrs: (d) => {
           const el = d as HTMLElement;
-          return { type: el.dataset.type, tags: el.dataset.tags ? el.dataset.tags.split(' ') : null };
+          return {
+            type: el.dataset.type, tags: el.dataset.tags ? el.dataset.tags.split(' ') : null,
+            hint: el.dataset.hint || null, note: el.dataset.note || null,
+          };
         },
       }],
       toDOM: (n) => ['p', {
         class: `el el-${n.attrs.type}`, 'data-type': n.attrs.type,
         ...(n.attrs.tags?.length && { 'data-tags': n.attrs.tags.join(' ') }),
+        ...(n.attrs.hint && { 'data-hint': n.attrs.hint }),
+        ...(n.attrs.note && { 'data-note': n.attrs.note, title: n.attrs.note }),
       }, 0],
     },
     text: { group: 'inline' },
@@ -58,7 +64,10 @@ export function blockToNode(b: Block): PMNode {
       if (part) inline.push(schema.text(part, marks));
     });
   }
-  return schema.nodes.element.create({ type: b.type, tags: b.tags?.length ? b.tags : null }, Fragment.from(inline));
+  return schema.nodes.element.create(
+    { type: b.type, tags: b.tags?.length ? b.tags : null, hint: b.hint || null, note: b.note || null },
+    Fragment.from(inline),
+  );
 }
 
 export function nodeToBlock(n: PMNode): Block {
@@ -78,6 +87,8 @@ export function nodeToBlock(n: PMNode): Block {
   });
   const block: Block = { type: n.attrs.type, runs: normalizeRuns(runs) };
   if (n.attrs.tags?.length) block.tags = [...n.attrs.tags];
+  if (n.attrs.hint) block.hint = n.attrs.hint;
+  if (n.attrs.note) block.note = n.attrs.note;
   return block;
 }
 
