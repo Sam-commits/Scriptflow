@@ -1,27 +1,31 @@
-import { TAG_CATEGORIES } from '../tags/categories';
 import { ThemeTokens } from './types';
 
 /**
- * Tag highlight colors, one pair per breakdown category: a deeper shade for
- * light surfaces and a brighter one for dark surfaces. Which one a theme uses
- * depends on the surface itself, not the mode, so Dark Desk (dark workspace,
- * white page) gets dark-on-white tags on the page and bright chips in the panel.
+ * Tag highlight colors, as named hues: a deeper shade for light surfaces and a
+ * brighter one for dark surfaces. Each tag type picks a hue (built-in types
+ * have their own; custom types choose one). Which shade shows depends on the
+ * surface itself, not the mode, so Dark Desk (dark workspace, white page) gets
+ * dark-on-white tags on the page and bright chips in the panel.
  */
-export const TAG_PALETTE: Record<string, { light: string; dark: string }> = {
-  cast: { light: '#c81e1e', dark: '#f87171' },
-  extras: { light: '#b4470a', dark: '#fb923c' },
-  props: { light: '#7c3aed', dark: '#a78bfa' },
-  wardrobe: { light: '#a21caf', dark: '#e879f9' },
-  makeup: { light: '#be185d', dark: '#f472b6' },
-  locations: { light: '#15803d', dark: '#4ade80' },
-  set: { light: '#4d6b0f', dark: '#a3e635' },
-  vehicles: { light: '#1d4ed8', dark: '#60a5fa' },
-  animals: { light: '#8a5a00', dark: '#facc15' },
-  effects: { light: '#0e7490', dark: '#22d3ee' },
-  stunts: { light: '#475569', dark: '#cbd5e1' },
-  sound: { light: '#4338ca', dark: '#a5b4fc' },
-  shots: { light: '#0f766e', dark: '#5eead4' },
+export const TAG_HUES: Record<string, { name: string; light: string; dark: string }> = {
+  red: { name: 'Red', light: '#c81e1e', dark: '#f87171' },
+  orange: { name: 'Orange', light: '#b4470a', dark: '#fb923c' },
+  amber: { name: 'Amber', light: '#8a5a00', dark: '#facc15' },
+  brown: { name: 'Brown', light: '#8b4a1c', dark: '#d9a273' },
+  olive: { name: 'Olive', light: '#4d6b0f', dark: '#a3e635' },
+  green: { name: 'Green', light: '#15803d', dark: '#4ade80' },
+  teal: { name: 'Teal', light: '#0f766e', dark: '#5eead4' },
+  cyan: { name: 'Cyan', light: '#0e7490', dark: '#22d3ee' },
+  sky: { name: 'Sky', light: '#0369a1', dark: '#7dd3fc' },
+  blue: { name: 'Blue', light: '#1d4ed8', dark: '#60a5fa' },
+  indigo: { name: 'Indigo', light: '#4338ca', dark: '#a5b4fc' },
+  violet: { name: 'Violet', light: '#7c3aed', dark: '#a78bfa' },
+  magenta: { name: 'Magenta', light: '#a21caf', dark: '#e879f9' },
+  pink: { name: 'Pink', light: '#be185d', dark: '#f472b6' },
+  slate: { name: 'Slate', light: '#475569', dark: '#cbd5e1' },
 };
+
+export const HUE_IDS = Object.keys(TAG_HUES);
 
 const rgb = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
@@ -51,20 +55,20 @@ export interface TagColor {
   soft: string;
 }
 
-export function tagColorOn(category: string, surface: string): TagColor {
-  const p = TAG_PALETTE[category] ?? TAG_PALETTE.props;
+export function tagColorOn(hue: string, surface: string): TagColor {
+  const p = TAG_HUES[hue] ?? TAG_HUES.slate;
   const dark = isDarkSurface(surface);
   const strong = dark ? p.dark : p.light;
   return { strong, soft: mix(strong, surface, dark ? SOFT.dark : SOFT.light) };
 }
 
 /**
- * CSS variables for every category: `--tag-props` / `--tag-props-soft` for the
- * page, and `--tag-props-ui` / `--tag-props-ui-soft` for the workspace (panels,
+ * CSS variables for every hue: `--tag-violet` / `--tag-violet-soft` for the
+ * page, and `--tag-violet-ui` / `--tag-violet-ui-soft` for the workspace (panels,
  * and the page in Draft view, which sits straight on the workspace).
  */
 export function tagCss(tokens: ThemeTokens): string {
-  return TAG_CATEGORIES.map(({ id }) => {
+  return HUE_IDS.map((id) => {
     const page = tagColorOn(id, tokens.page);
     const ui = tagColorOn(id, tokens.panel);
     const bg = tagColorOn(id, tokens.bg);

@@ -13,7 +13,8 @@ import { sampleScreenplay } from '../sample';
 import { breakdownCsv, countTags, findItem, sceneBreakdown, sceneRanges, scenesByItem, speakerName } from '../tags/breakdown';
 import { DEFAULT_APPEARANCE, builtinThemes, tagColorOn, themeTokens, tokensToCss } from '../themes';
 import { contrast } from '../themes/contrast';
-import { CATEGORY_IDS } from '../tags/categories';
+import { HUE_IDS } from '../themes';
+import { TAG_CATEGORIES } from '../tags/categories';
 
 const script = (blocks: Block[]): Script => ({ docType: 'screenplay', titlePage: {} as never, blocks });
 const stateOf = (blocks: Block[]) => EditorState.create({ doc: scriptToDoc(script(blocks), 'scene_heading') });
@@ -168,18 +169,24 @@ describe('breakdown', () => {
 describe('tag colors', () => {
   it('are written as CSS variables with the theme', () => {
     const css = tokensToCss(themeTokens(DEFAULT_APPEARANCE, 'dark'), 'dark');
-    for (const id of CATEGORY_IDS) for (const v of ['', '-soft', '-ui', '-ui-soft']) expect(css).toContain(`--tag-${id}${v}:#`);
+    for (const id of HUE_IDS) for (const v of ['', '-soft', '-ui', '-ui-soft']) expect(css).toContain(`--tag-${id}${v}:#`);
   });
 
   it('follow the page, not the mode: Dark Desk tags its white page in deep colors', () => {
     const desk = builtinThemes.find((t) => t.id === 'dark-desk')!;
-    expect(tagColorOn('props', desk.tokens.page).strong).toBe('#7c3aed');
-    expect(tagColorOn('props', desk.tokens.panel).strong).toBe('#a78bfa');
+    expect(tagColorOn('violet', desk.tokens.page).strong).toBe('#7c3aed');
+    expect(tagColorOn('violet', desk.tokens.panel).strong).toBe('#a78bfa');
+  });
+
+  it('give every built-in type its own hue', () => {
+    const hues = TAG_CATEGORIES.map((c) => c.hue);
+    expect(new Set(hues).size).toBe(hues.length);
+    for (const h of hues) expect(HUE_IDS).toContain(h);
   });
 
   for (const t of builtinThemes) {
     it(`are readable in ${t.name}`, () => {
-      for (const id of CATEGORY_IDS) {
+      for (const id of HUE_IDS) {
         const page = tagColorOn(id, t.tokens.page);
         expect(contrast(page.strong, t.tokens.page), `${id} underline`).toBeGreaterThanOrEqual(3);
         expect(contrast(t.tokens.pageText, page.soft), `${id} text on highlight`).toBeGreaterThanOrEqual(4.5);

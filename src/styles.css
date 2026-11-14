@@ -278,6 +278,23 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
 .bd-edit-actions button { font-size: 12px; padding: 3px 8px; }
 .bd-edit-actions .spacer { flex: 1; }
 .danger { color: var(--error); }
+.tag-cat.add { border-style: dashed; color: var(--muted); }
+.tag-cat-new { display: inline-flex; gap: 4px; }
+.tag-cat-new input { width: 140px; font-size: 12px; padding: 3px 8px; border-radius: 999px; }
+.tag-cat-new button { font-size: 12px; padding: 3px 9px; border-radius: 999px; }
+.bd-tabs button { padding: 4px 6px; }
+.bd-tip { font-size: 11px; }
+.bd-types { display: grid; gap: 14px; }
+.bd-add-row.two { grid-template-columns: 1fr auto; }
+.bd-type { flex: 1; min-width: 0; display: flex; gap: 7px; align-items: center; padding: 3px 6px; }
+.bd-type span:not(.dot) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-type small { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.bd-show { display: flex; gap: 4px; align-items: center; font-size: 11px; color: var(--muted); padding-right: 4px; }
+.bd-group li.muted .bd-type { opacity: .55; }
+.hue-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.hue-chip { width: 20px; height: 20px; border-radius: 50%; padding: 0; border: 2px solid var(--panel); }
+.hue-chip.on { box-shadow: 0 0 0 2px var(--text); }
+.smarttype li.hint-row { cursor: default; opacity: .8; }
 
 @media (max-width: 900px) {
   .app, .with-panel { grid-template-columns: 1fr; grid-template-areas: "top" "err" "main" "status"; }
@@ -291,6 +308,9 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
 /* Writing assistant (src/assist/, src/editor/assistPlugins.ts) */
 .smarttype.slash { min-width: 280px; font: 13px/1.3 Inter, system-ui, sans-serif; }
 .smarttype li small { display: block; color: var(--muted); font-size: 11px; }
+.smarttype.hashtag { max-height: 260px; overflow-y: auto; }
+.smarttype.hashtag li { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; }
+.smarttype.hashtag li small { grid-column: 2; }
 .smarttype li.active small { color: inherit; opacity: .85; }
 .page .ghost { color: var(--page-muted); opacity: .75; pointer-events: none; user-select: none; }
 .page .ProseMirror > p.hint::before {

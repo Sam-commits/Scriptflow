@@ -15,6 +15,9 @@ import { Block, Script, TagItem, TitlePage, blockText } from './model';
 import { sampleScreenplay } from './sample';
 import { ScriptMeta, blankScript, deleteScript, listScripts, loadScript, newId, saveScript } from './storage';
 import { breakdownCsv, findItem } from './tags/breakdown';
+import { HUE_IDS } from './themes';
+import { TagCategory, allTagTypes, getCategory, rememberCategory, typeSlug } from './tags/categories';
+import { HashtagOption } from './editor/hashtag';
 import { AppearanceDialog } from './ui/AppearanceDialog';
 import { BreakdownPanel } from './ui/BreakdownPanel';
 import { TagDialog, TagRequest, lastCategory } from './ui/TagDialog';
@@ -202,6 +205,48 @@ export function App() {
   // ---- Tagging -------------------------------------------------------------
   const items = script.tags ?? [];
   const setItems = (next: TagItem[]) => persist((s) => ({ ...s, tags: next }));
+  const tagTypes = useMemo(() => allTagTypes(script), [script.tagTypes, script.hiddenTagTypes]);
+
+  /** Add a custom tag type to this script; returns its id. */
+  const addTagType = (name: string, hue?: string): string => {
+    const cur = scriptRef.current;
+    const types = allTagTypes(cur);
+    const id = typeSlug(name, types.map((t) => t.id));
+    const used = new Set(types.map((t) => t.hue));
+    const type: TagCategory = { id, name: name.trim(), hint: '', hue: hue ?? HUE_IDS.find((h) => !used.has(h)) ?? HUE_IDS[types.length % HUE_IDS.length] };
+    persist((s) => ({ ...s, tagTypes: [...(s.tagTypes ?? []), type] }));
+    return id;
+  };
+
+  const updateTagType = (tid: string, patch: Partial<TagCategory>) =>
+    persist((s) => ({ ...s, tagTypes: (s.tagTypes ?? []).map((t) => (t.id === tid ? { ...t, ...patch } : t)) }));
+
+  const setTypeHidden = (tid: string, hidden: boolean) =>
+    persist((s) => {
+      const rest = (s.hiddenTagTypes ?? []).filter((x) => x !== tid);
+      return { ...s, hiddenTagTypes: hidden ? [...rest, tid] : rest };
+    });
+
+  /** Delete a custom type with its elements, and remove their tags from the script. */
+  const deleteTagType = (tid: string) => {
+    const doomed = items.filter((i) => i.category === tid);
+    const name = getCategory(tid, tagTypes).name;
+    if (doomed.length && !confirm(`Delete the tag type “${name}” and its ${doomed.length} element${doomed.length === 1 ? '' : 's'}? Their tags are removed from the script.`)) return;
+    persist((s) => ({ ...s, tagTypes: (s.tagTypes ?? []).filter((t) => t.id !== tid), tags: (s.tags ?? []).filter((i) => i.category !== tid) }));
+    for (const d of doomed) dispatchTag((st) => removeTagEverywhere(st, d.id));
+  };
+
+  /** "#word" accepted in the editor: reuse or create the element and return its id. */
+  const onHashtag = (o: HashtagOption): string => {
+    if (o.itemId) return o.itemId;
+    const current = scriptRef.current.tags ?? [];
+    const found = findItem(current, o.category, o.name);
+    if (found) return found.id;
+    const item: TagItem = { id: newId(), category: o.category, name: o.name };
+    rememberCategory(o.category);
+    setItems([...current, item]);
+    return item.id;
+  };
 
   const openTagDialog = () => {
     const view = viewRef.current;
@@ -312,9 +357,10 @@ export function App() {
   // Each tag item takes its category's theme colors.
   const tagStyle = useMemo(() => items.map((i) => {
     const sel = `.tags-on .page [data-tag="${CSS.escape(i.id)}"]`;
-    return `${sel}{--tc:var(--tag-${i.category});--tc-soft:var(--tag-${i.category}-soft);--tc-ui:var(--tag-${i.category}-ui);--tc-ui-soft:var(--tag-${i.category}-ui-soft)}`;
+    const h = getCategory(i.category, tagTypes).hue;
+    return `${sel}{--tc:var(--tag-${h});--tc-soft:var(--tag-${h}-soft);--tc-ui:var(--tag-${h}-ui);--tc-ui-soft:var(--tag-${h}-ui-soft)}`;
   }).join('\n') + (focusId ? `\n.tags-on .page [data-tag="${CSS.escape(focusId)}"]{outline:2px solid var(--tc);outline-offset:1px;border-radius:2px}` : ''),
-  [items, focusId]);
+  [items, focusId, tagTypes]);
 
   // ---- Writing assistant ----------------------------------------------------
   const onCommand = (cmd: string, index: number) => {
@@ -530,8 +576,10 @@ export function App() {
           zoom={zoom}
           assist={assist.settings}
           tags={items}
+          tagTypes={tagTypes}
           savedStructures={savedStructures}
           onCommand={onCommand}
+          onHashtag={onHashtag}
         />
       </main>
 
@@ -540,6 +588,11 @@ export function App() {
           dt={dt}
           blocks={script.blocks}
           items={items}
+          tagTypes={tagTypes}
+          onAddType={addTagType}
+          onUpdateType={updateTagType}
+          onHideType={setTypeHidden}
+          onDeleteType={deleteTagType}
           cursorIndex={cursor.index}
           cursorTags={cursor.tags}
           showTags={look.settings.showTags}
@@ -562,6 +615,8 @@ export function App() {
           text={pendingTag.text}
           otherMentions={pendingTag.others.length}
           items={items}
+          tagTypes={tagTypes}
+          onAddType={addTagType}
           initialCategory={lastCategory()}
           onTag={applyTag}
           onClose={() => { setPendingTag(null); viewRef.current?.focus(); }}

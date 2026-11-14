@@ -16,6 +16,8 @@ import { enterCommand, hardBreak, setElementType, tabCommand } from './commands'
 import { docToBlocks, schema, scriptToDoc } from './schema';
 import { pageBreakKey, pageBreakPlugin } from './pagebreaks';
 import { getSuggestions } from './smarttype';
+import { HashtagOption, hashtagOptions, hashtagQuery } from './hashtag';
+import { TagCategory, lastCategory, tagColor, getCategory } from '../tags/categories';
 
 interface PopupItem {
   text: string;
@@ -24,6 +26,8 @@ interface PopupItem {
   desc?: string;
   /** A "/" command id: accepting runs it instead of inserting text. */
   command?: string;
+  /** A "#hashtag" choice: accepting tags the word instead of inserting text. */
+  hashtag?: HashtagOption;
 }
 
 interface Popup {
@@ -53,10 +57,14 @@ interface Props {
   assist: AssistSettings;
   /** Breakdown items, so tagged Cast and Locations join SmartType. */
   tags: TagItem[];
+  /** Every tag type (built-in and custom), for the # menu. */
+  tagTypes: TagCategory[];
   /** Scene templates the writer saved, for the "/" menu. */
   savedStructures: SavedStructure[];
   /** A "/" command was chosen on the empty element at `index`. */
   onCommand?: (id: string, index: number) => void;
+  /** A "#hashtag" was accepted: create the element if needed and return its id. */
+  onHashtag?: (option: HashtagOption) => string | null;
 }
 
 interface TagChip { left: number; top: number }
@@ -64,19 +72,19 @@ interface TagChip { left: number; top: number }
 const SCENE_START_RE = /^(int|ext|est|i\/e|int\.?\/ext)\.\s/i;
 
 export function Editor({
-  docType, initial, onChange, onElementChange, viewRef, pageStarts, zoom, onStateChange, onTag, assist, tags, savedStructures, onCommand,
+  docType, initial, onChange, onElementChange, viewRef, pageStarts, zoom, onStateChange, onTag, assist, tags, tagTypes, savedStructures, onCommand, onHashtag,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [popup, setPopup] = useState<Popup | null>(null);
   const [chip, setChip] = useState<TagChip | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const dismissed = useRef(false);
-  const cb = useRef({ onChange, onElementChange, onStateChange, onTag, onCommand });
-  cb.current = { onChange, onElementChange, onStateChange, onTag, onCommand };
+  const cb = useRef({ onChange, onElementChange, onStateChange, onTag, onCommand, onHashtag });
+  cb.current = { onChange, onElementChange, onStateChange, onTag, onCommand, onHashtag };
   const assistRef = useRef(assist);
   assistRef.current = assist;
-  const dataRef = useRef({ tags, savedStructures });
-  dataRef.current = { tags, savedStructures };
+  const dataRef = useRef({ tags, tagTypes, savedStructures });
+  dataRef.current = { tags, tagTypes, savedStructures };
   const ghostTimer = useRef<number>();
   const ghostDismissed = useRef(false);
   const zoomRef = useRef(zoom);
@@ -92,6 +100,25 @@ export function Editor({
       show(null);
       view.dispatch(view.state.tr.delete(p.from, p.to));
       cb.current.onCommand?.(item.command, index);
+      return;
+    }
+    if (item.hashtag) {
+      const o = item.hashtag;
+      if (o.hint) return;
+      if (o.pickType) {
+        // "#" -> "#props:"; the menu stays open for the element name.
+        dismissed.current = false;
+        view.dispatch(view.state.tr.insertText(o.insert, p.from, p.to).scrollIntoView());
+        view.focus();
+        return;
+      }
+      const id = cb.current.onHashtag?.(o);
+      show(null);
+      const tr = view.state.tr.insertText(o.insert, p.from, p.to);
+      if (id) tr.addMark(p.from, p.from + o.insert.length, schema.marks.tag.create({ id }));
+      tr.setStoredMarks([]);
+      view.dispatch(tr.scrollIntoView());
+      view.focus();
       return;
     }
     const tr = view.state.tr.insertText(item.text + (item.suffix ?? ''), p.from, p.to);
@@ -210,9 +237,14 @@ export function Editor({
       let items: PopupItem[] = [];
       let from = 0;
 
-      // "/" on an empty line opens the command menu.
+      // "#word" offers to tag the word (always on, whatever the assistant level).
+      const hash = hashtagQuery(before);
       const q = s.sceneBuilder && !after ? slashQuery(before) : null;
-      if (q !== null) {
+      if (hash) {
+        items = hashtagOptions(hash, dataRef.current.tags, dataRef.current.tagTypes, lastCategory())
+          .map((o) => ({ text: o.label, desc: o.desc, hashtag: o }));
+        from = $from.start() + hash.from;
+      } else if (q !== null) {
         items = matchSlash(slashCommands(dt.id, dataRef.current.savedStructures), q)
           .map((c) => ({ text: c.label, desc: c.desc, command: c.id }));
         from = $from.start();
@@ -320,15 +352,17 @@ export function Editor({
     <div className="editor-host" style={{ zoom }}>
       <div ref={host} className={`page dt-${docType.id}`} />
       {popup && (
-        <ul className={`smarttype${popup.items[0]?.command ? ' slash' : ''}`} style={{ left: popup.left, top: popup.top }} role="listbox">
+        <ul className={`smarttype${popup.items[0]?.command ? ' slash' : ''}${popup.items[0]?.hashtag ? ' slash hashtag' : ''}`} style={{ left: popup.left, top: popup.top }} role="listbox">
           {popup.items.map((it, i) => (
             <li
-              key={it.command ?? it.text}
+              key={it.command ?? (it.hashtag ? `${it.hashtag.pickType ? "type" : it.hashtag.itemId ?? "new"}:${it.hashtag.category}` : it.text)}
+              ref={i === popup.index ? (el) => el?.scrollIntoView?.({ block: 'nearest' }) : undefined}
               role="option"
               aria-selected={i === popup.index}
-              className={i === popup.index ? 'active' : ''}
+              className={`${i === popup.index ? 'active' : ''}${it.hashtag?.hint ? ' hint-row' : ''}`}
               onMouseDown={(e) => { e.preventDefault(); if (viewRef.current) accept(viewRef.current, it); }}
             >
+              {it.hashtag && <span className="dot" style={{ background: it.hashtag.hint ? 'transparent' : tagColor(getCategory(it.hashtag.category, tagTypes), '-ui') }} />}
               {it.text}
               {it.desc && <small>{it.desc}</small>}
             </li>
