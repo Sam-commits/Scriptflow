@@ -492,7 +492,7 @@ export function App() {
       <style>{css}</style>
       <style>{tagStyle}</style>
       <header className="topbar">
-        <div className="brand">Right Write Wright</div>
+        <div className="brand">Write Right Wright</div>
         <button className="title-btn" onClick={() => setTitleOpen(true)} title="Edit title page">
           {script.titlePage.title || 'Untitled'}
           <span className="badge">{dt.name}</span>
@@ -532,7 +532,7 @@ export function App() {
             <option value="fountain" disabled={!dt.fountain}>Fountain{dt.fountain ? '' : ' (screenplays only)'}</option>
             <option value="csv" disabled={!items.length}>Breakdown (.csv)</option>
             <option value="characters" disabled={!profiles.some(profileHasContent)}>Character profiles (.md)</option>
-            <option value="native">Right Write Wright file (.scriptflow)</option>
+            <option value="native">Write Right Wright file (.scriptflow)</option>
           </select>
         </label>
         <button className="icon-btn" onClick={look.toggleMode}
